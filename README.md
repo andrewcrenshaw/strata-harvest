@@ -1,6 +1,10 @@
 # strata-harvest
 
+[![Status: Pre-Alpha / development](https://img.shields.io/badge/status-pre--alpha%20(0.x)-orange.svg)](https://semver.org/spec/v2.0.0.html)
 [![PyPI version](https://img.shields.io/pypi/v/strata-harvest.svg)](https://pypi.org/project/strata-harvest/)
+
+> **Development (0.x):** This package is **incomplete** and **not production-ready**. Public APIs, parsers, and scraping behavior may change; test coverage and operational hardening are still in progress.
+
 [![Python versions](https://img.shields.io/pypi/pyversions/strata-harvest.svg)](https://pypi.org/project/strata-harvest/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

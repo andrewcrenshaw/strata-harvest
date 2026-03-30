@@ -15,7 +15,7 @@ def test_pyproject_name_version_python_requires() -> None:
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     proj = data["project"]
     assert proj["name"] == "strata-harvest"
-    assert proj["version"] == "0.1.0"
+    assert proj["version"] == "0.1.1"
     assert proj["requires-python"] == ">=3.11"
 
 

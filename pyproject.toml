@@ -1,6 +1,6 @@
 [project]
 name = "strata-harvest"
-version = "0.1.0"
+version = "0.1.1"
 description = "Career page scraping and ATS parsing library for job search automation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["job-search", "career", "scraping", "ats", "parsing"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
