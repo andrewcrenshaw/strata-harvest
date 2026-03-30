@@ -1,0 +1,166 @@
+{
+  "jobs": [
+    {
+      "id": 900001,
+      "internal_job_id": 1000001,
+      "title": "Staff Backend Engineer",
+      "updated_at": "2026-03-25T08:00:00Z",
+      "requisition_id": "BE-2026-101",
+      "location": {
+        "name": "London, UK"
+      },
+      "absolute_url": "https://boards.greenhouse.io/megacorp/jobs/900001",
+      "language": "en",
+      "metadata": null,
+      "content": "<p>Lead backend architecture for our payments platform.</p>",
+      "departments": [
+        {
+          "id": 50010,
+          "name": "Payments",
+          "parent_id": 50000,
+          "child_ids": []
+        },
+        {
+          "id": 50000,
+          "name": "Engineering",
+          "parent_id": null,
+          "child_ids": [
+            50010,
+            50020
+          ]
+        }
+      ],
+      "offices": [
+        {
+          "id": 7000,
+          "name": "EMEA",
+          "location": null,
+          "parent_id": null,
+          "child_ids": [
+            7001
+          ]
+        },
+        {
+          "id": 7001,
+          "name": "London",
+          "location": "London, United Kingdom",
+          "parent_id": 7000,
+          "child_ids": []
+        }
+      ],
+      "pay_input_ranges": [
+        {
+          "min_cents": 10000000,
+          "max_cents": 14000000,
+          "currency_type": "GBP",
+          "title": "London Salary Range"
+        }
+      ]
+    },
+    {
+      "id": 900002,
+      "internal_job_id": 1000002,
+      "title": "Marketing Coordinator (Contract)",
+      "updated_at": "2026-03-22T12:30:00Z",
+      "requisition_id": null,
+      "location": {
+        "name": "Remote — US Only"
+      },
+      "absolute_url": "https://boards.greenhouse.io/megacorp/jobs/900002",
+      "language": "en",
+      "metadata": [
+        {
+          "id": 77001,
+          "name": "Contract Length",
+          "value_type": "text",
+          "value": "6 months"
+        }
+      ],
+      "content": null,
+      "departments": [],
+      "offices": [],
+      "pay_input_ranges": []
+    },
+    {
+      "id": 900003,
+      "internal_job_id": 1000003,
+      "title": "フロントエンドエンジニア",
+      "updated_at": "2026-03-10T04:00:00+09:00",
+      "requisition_id": "FE-JP-001",
+      "location": {
+        "name": "東京"
+      },
+      "absolute_url": "https://boards.greenhouse.io/megacorp/jobs/900003",
+      "language": "ja",
+      "metadata": null,
+      "content": "<p>フロントエンドエンジニアを募集しています。React, TypeScript経験者歓迎。</p>",
+      "departments": [
+        {
+          "id": 50020,
+          "name": "Frontend",
+          "parent_id": 50000,
+          "child_ids": []
+        }
+      ],
+      "offices": [
+        {
+          "id": 7010,
+          "name": "Tokyo",
+          "location": "Tokyo, Japan",
+          "parent_id": null,
+          "child_ids": []
+        }
+      ],
+      "pay_input_ranges": [
+        {
+          "min_cents": 600000000,
+          "max_cents": 900000000,
+          "currency_type": "JPY",
+          "title": "Tokyo Range"
+        }
+      ]
+    },
+    {
+      "id": 900004,
+      "internal_job_id": 1000004,
+      "title": "Head of People",
+      "updated_at": "2026-01-15T10:00:00Z",
+      "requisition_id": "HR-001",
+      "location": {
+        "name": "New York, NY or London, UK"
+      },
+      "absolute_url": "https://boards.greenhouse.io/megacorp/jobs/900004",
+      "language": "en",
+      "metadata": null,
+      "content": "<h2>About Us</h2><p>MegaCorp is a global fintech company.</p><h2>The Role</h2><p>Lead our People team across 3 continents.</p>",
+      "departments": [
+        {
+          "id": 60000,
+          "name": "People",
+          "parent_id": null,
+          "child_ids": []
+        }
+      ],
+      "offices": [
+        {
+          "id": 7001,
+          "name": "London",
+          "location": "London, United Kingdom",
+          "parent_id": 7000,
+          "child_ids": []
+        },
+        {
+          "id": 8304,
+          "name": "New York City",
+          "location": "New York, NY, United States",
+          "parent_id": null,
+          "child_ids": []
+        }
+      ],
+      "pay_input_ranges": []
+    }
+  ],
+  "meta": {
+    "total": 4
+  }
+}

@@ -38,3 +38,6 @@ coverage.xml
 *.swo
 *~
 .DS_Store
+
+# Agent runtime data (not source code)
+.agent-data/

@@ -1,0 +1,38 @@
+{
+  "id": "single-posting-001-aaa-bbb",
+  "text": "VP of Engineering",
+  "createdAt": 1712016000000,
+  "categories": {
+    "commitment": "Full-time",
+    "department": "Engineering",
+    "location": "San Francisco, CA",
+    "team": "Leadership",
+    "allLocations": [
+      "San Francisco, CA"
+    ]
+  },
+  "country": "US",
+  "description": "<div><p>Lead our engineering organization through a period of rapid growth.</p></div>",
+  "descriptionPlain": "Lead our engineering organization through a period of rapid growth.",
+  "lists": [
+    {
+      "text": "Qualifications",
+      "content": "<li>10+ years of engineering leadership experience</li><li>Experience scaling teams from 20 to 100+ engineers</li><li>Track record of shipping products at scale</li>"
+    },
+    {
+      "text": "What we offer",
+      "content": "<li>Competitive equity package</li><li>Executive coaching</li>"
+    }
+  ],
+  "additional": "<div>This is a critical leadership hire.</div>",
+  "additionalPlain": "This is a critical leadership hire.",
+  "hostedUrl": "https://jobs.lever.co/acmecorp/single-posting-001-aaa-bbb",
+  "applyUrl": "https://jobs.lever.co/acmecorp/single-posting-001-aaa-bbb/apply",
+  "workplaceType": "on-site",
+  "salaryRange": {
+    "currency": "USD",
+    "interval": "per-year",
+    "min": 250000,
+    "max": 350000
+  }
+}

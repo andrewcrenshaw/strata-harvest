@@ -1,0 +1,120 @@
+{
+  "jobs": [
+    {
+      "id": 127817,
+      "internal_job_id": 144381,
+      "title": "Senior Software Engineer",
+      "updated_at": "2026-03-15T10:55:28-05:00",
+      "requisition_id": "ENG-042",
+      "location": {
+        "name": "New York, NY"
+      },
+      "absolute_url": "https://boards.greenhouse.io/acmecorp/jobs/127817",
+      "language": "en",
+      "metadata": [
+        {
+          "id": 12345,
+          "name": "Employment Type",
+          "value_type": "text",
+          "value": "Full-time"
+        }
+      ],
+      "content": "<p>We're looking for a Senior Software Engineer to join our platform team.</p><h3>Requirements</h3><ul><li>5+ years of experience with Python or Go</li><li>Experience with distributed systems</li></ul><h3>Benefits</h3><ul><li>Competitive salary</li><li>Remote-friendly</li></ul>",
+      "departments": [
+        {
+          "id": 13583,
+          "name": "Engineering",
+          "parent_id": null,
+          "child_ids": [
+            13585
+          ]
+        }
+      ],
+      "offices": [
+        {
+          "id": 8304,
+          "name": "New York City",
+          "location": "New York, NY, United States",
+          "parent_id": null,
+          "child_ids": []
+        }
+      ],
+      "pay_input_ranges": [
+        {
+          "min_cents": 18000000,
+          "max_cents": 22000000,
+          "currency_type": "USD",
+          "title": "NYC Salary Range"
+        }
+      ]
+    },
+    {
+      "id": 128901,
+      "internal_job_id": 145502,
+      "title": "Product Designer",
+      "updated_at": "2026-03-20T14:30:00-05:00",
+      "requisition_id": "DES-015",
+      "location": {
+        "name": "San Francisco, CA"
+      },
+      "absolute_url": "https://boards.greenhouse.io/acmecorp/jobs/128901",
+      "language": "en",
+      "metadata": null,
+      "content": "<p>Join our design team and shape the future of our product experience.</p><h3>What you'll do</h3><ul><li>Lead end-to-end design for key features</li><li>Collaborate closely with engineering and product</li></ul>",
+      "departments": [
+        {
+          "id": 13590,
+          "name": "Design",
+          "parent_id": null,
+          "child_ids": []
+        }
+      ],
+      "offices": [
+        {
+          "id": 8310,
+          "name": "San Francisco",
+          "location": "San Francisco, CA, United States",
+          "parent_id": null,
+          "child_ids": []
+        }
+      ],
+      "pay_input_ranges": [
+        {
+          "min_cents": 15000000,
+          "max_cents": 19000000,
+          "currency_type": "USD",
+          "title": "SF Salary Range"
+        }
+      ]
+    },
+    {
+      "id": 129050,
+      "internal_job_id": null,
+      "title": "General Application — Engineering",
+      "updated_at": "2026-02-01T09:00:00-05:00",
+      "requisition_id": null,
+      "location": {
+        "name": "Remote"
+      },
+      "absolute_url": "https://boards.greenhouse.io/acmecorp/jobs/129050",
+      "language": "en",
+      "metadata": null,
+      "content": "<p>Don't see a role that fits? Submit a general application and we'll reach out when something opens up.</p>",
+      "departments": [
+        {
+          "id": 13583,
+          "name": "Engineering",
+          "parent_id": null,
+          "child_ids": [
+            13585
+          ]
+        }
+      ],
+      "offices": [],
+      "pay_input_ranges": []
+    }
+  ],
+  "meta": {
+    "total": 3
+  }
+}

@@ -24,29 +24,34 @@ class Crawler:
         self._timeout = timeout
         self._user_agent = user_agent
 
-    async def scrape(self, url: str) -> ScrapeResult:
+    async def scrape(self, url: str, *, previous_hash: str | None = None) -> ScrapeResult:
         """Scrape a career page URL and return structured listings."""
         await self._rate_limiter.acquire()
 
         ats_info = await detect_ats(url, timeout=self._timeout, user_agent=self._user_agent)
         parser = BaseParser.for_provider(ats_info.provider)
 
-        result = await safe_fetch(url, timeout=self._timeout, user_agent=self._user_agent)
+        fetch_headers = {"User-Agent": self._user_agent} if self._user_agent else None
+        result = await safe_fetch(url, timeout=self._timeout, headers=fetch_headers)
         if not result.ok:
             return ScrapeResult(
                 url=url,
-                provider=ats_info.provider,
+                ats_info=ats_info,
                 error=result.error or f"HTTP {result.status_code}",
-                elapsed_ms=result.elapsed_ms,
+                scrape_duration_ms=result.elapsed_ms,
             )
 
-        listings = parser.parse(result.content or "", url=url)
+        page_hash = content_hash(result.content or "")
+        changed = previous_hash is None or page_hash != previous_hash
+        jobs = parser.parse(result.content or "", url=url)
+
         return ScrapeResult(
             url=url,
-            provider=ats_info.provider,
-            listings=listings,
-            content_hash=content_hash(result.content or ""),
-            elapsed_ms=result.elapsed_ms,
+            jobs=jobs,
+            content_hash=page_hash,
+            changed=changed,
+            ats_info=ats_info,
+            scrape_duration_ms=result.elapsed_ms,
         )
 
 
@@ -64,4 +69,4 @@ async def harvest(url: str, *, timeout: float = 30.0) -> list[JobListing]:
     """One-shot convenience: scrape a URL and return job listings."""
     crawler = create_crawler(timeout=timeout)
     result = await crawler.scrape(url)
-    return result.listings
+    return result.jobs

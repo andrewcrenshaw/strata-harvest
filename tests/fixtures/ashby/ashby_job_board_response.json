@@ -1,0 +1,70 @@
+{
+  "data": {
+    "jobBoard": {
+      "title": "Acme Corp Careers",
+      "jobPostings": [
+        {
+          "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "title": "Senior Backend Engineer",
+          "publishedDate": "2026-03-01T00:00:00.000Z",
+          "updatedAt": "2026-03-15T12:00:00.000Z",
+          "employmentType": "FullTime",
+          "locationName": "San Francisco, CA",
+          "isRemote": false,
+          "teamName": "Platform",
+          "departmentName": "Engineering",
+          "descriptionHtml": "<div><p>We're looking for a Senior Backend Engineer to join our Platform team.</p><h3>What you'll do</h3><ul><li>Design and build scalable backend services</li><li>Lead technical architecture decisions</li></ul><h3>Requirements</h3><ul><li>5+ years of backend development experience</li><li>Proficiency in Python, Go, or Rust</li><li>Experience with distributed systems and microservices</li></ul><h3>Nice to have</h3><ul><li>Experience with Kubernetes</li><li>Open source contributions</li></ul></div>",
+          "descriptionPlain": "We're looking for a Senior Backend Engineer to join our Platform team.\n\nWhat you'll do\n- Design and build scalable backend services\n- Lead technical architecture decisions\n\nRequirements\n- 5+ years of backend development experience\n- Proficiency in Python, Go, or Rust\n- Experience with distributed systems and microservices\n\nNice to have\n- Experience with Kubernetes\n- Open source contributions",
+          "compensationTierSummary": "$170,000 - $230,000 USD",
+          "jobUrl": "https://jobs.ashbyhq.com/acmecorp/a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "applyUrl": "https://jobs.ashbyhq.com/acmecorp/a1b2c3d4-e5f6-7890-abcd-ef1234567890/application",
+          "isListed": true,
+          "secondaryLocations": [],
+          "compensation": null
+        },
+        {
+          "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+          "title": "Product Designer",
+          "publishedDate": "2026-02-20T00:00:00.000Z",
+          "updatedAt": "2026-03-10T08:30:00.000Z",
+          "employmentType": "FullTime",
+          "locationName": "New York, NY",
+          "isRemote": true,
+          "teamName": "Product Design",
+          "departmentName": "Design",
+          "descriptionHtml": "<div><p>Join our design team to shape product experiences.</p></div>",
+          "descriptionPlain": "Join our design team to shape product experiences.",
+          "compensationTierSummary": null,
+          "jobUrl": "https://jobs.ashbyhq.com/acmecorp/b2c3d4e5-f6a7-8901-bcde-f12345678901",
+          "applyUrl": "https://jobs.ashbyhq.com/acmecorp/b2c3d4e5-f6a7-8901-bcde-f12345678901/application",
+          "isListed": true,
+          "secondaryLocations": [
+            {
+              "locationName": "Remote - US"
+            }
+          ],
+          "compensation": null
+        },
+        {
+          "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+          "title": "Data Science Intern",
+          "publishedDate": "2026-03-10T00:00:00.000Z",
+          "updatedAt": "2026-03-10T00:00:00.000Z",
+          "employmentType": "Intern",
+          "locationName": "Remote",
+          "isRemote": true,
+          "teamName": "Data Science",
+          "departmentName": "Engineering",
+          "descriptionHtml": "<div><p>Summer internship in data science and machine learning.</p><h3>Requirements</h3><ul><li>Currently enrolled in a CS or related program</li><li>Familiarity with Python and pandas</li></ul></div>",
+          "descriptionPlain": "Summer internship in data science and machine learning.\n\nRequirements\n- Currently enrolled in a CS or related program\n- Familiarity with Python and pandas",
+          "compensationTierSummary": "$40/hr",
+          "jobUrl": "https://jobs.ashbyhq.com/acmecorp/c3d4e5f6-a7b8-9012-cdef-123456789012",
+          "applyUrl": "https://jobs.ashbyhq.com/acmecorp/c3d4e5f6-a7b8-9012-cdef-123456789012/application",
+          "isListed": true,
+          "secondaryLocations": [],
+          "compensation": null
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,90 @@
+[
+  {
+    "id": "abc-1001-def-2002-ghi-3003",
+    "text": "Senior Software Engineer",
+    "createdAt": 1711929600000,
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Engineering",
+      "location": "San Francisco, CA",
+      "team": "Backend",
+      "allLocations": [
+        "San Francisco, CA",
+        "Remote"
+      ]
+    },
+    "country": "US",
+    "opening": "<b>About the role</b>",
+    "openingPlain": "About the role",
+    "description": "<div><b>About the role</b><br>We are looking for a senior engineer to join our backend team and help build scalable distributed systems.</div>",
+    "descriptionPlain": "About the role\nWe are looking for a senior engineer to join our backend team and help build scalable distributed systems.",
+    "descriptionBody": "<div>We are looking for a senior engineer to join our backend team and help build scalable distributed systems.</div>",
+    "descriptionBodyPlain": "We are looking for a senior engineer to join our backend team and help build scalable distributed systems.",
+    "lists": [
+      {
+        "text": "Requirements",
+        "content": "<li>5+ years of professional software development experience</li><li>Proficiency in Python or Go</li><li>Experience with distributed systems</li>"
+      },
+      {
+        "text": "Nice to have",
+        "content": "<li>Experience with Kubernetes</li><li>Open source contributions</li>"
+      }
+    ],
+    "additional": "<div>We are an equal opportunity employer and value diversity.</div>",
+    "additionalPlain": "We are an equal opportunity employer and value diversity.",
+    "hostedUrl": "https://jobs.lever.co/acmecorp/abc-1001-def-2002-ghi-3003",
+    "applyUrl": "https://jobs.lever.co/acmecorp/abc-1001-def-2002-ghi-3003/apply",
+    "workplaceType": "hybrid",
+    "salaryRange": {
+      "currency": "USD",
+      "interval": "per-year",
+      "min": 150000,
+      "max": 220000
+    }
+  },
+  {
+    "id": "jkl-4004-mno-5005-pqr-6006",
+    "text": "Product Designer",
+    "createdAt": 1711843200000,
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Design",
+      "location": "New York, NY",
+      "team": "Product Design"
+    },
+    "country": "US",
+    "description": "<div>Join our design team to shape the future of our product experience.</div>",
+    "descriptionPlain": "Join our design team to shape the future of our product experience.",
+    "lists": [],
+    "additional": "",
+    "additionalPlain": "",
+    "hostedUrl": "https://jobs.lever.co/acmecorp/jkl-4004-mno-5005-pqr-6006",
+    "applyUrl": "https://jobs.lever.co/acmecorp/jkl-4004-mno-5005-pqr-6006/apply",
+    "workplaceType": "on-site"
+  },
+  {
+    "id": "stu-7007-vwx-8008-yza-9009",
+    "text": "Data Analyst Intern",
+    "createdAt": 1711756800000,
+    "categories": {
+      "commitment": "Intern",
+      "department": "Data",
+      "location": "Remote",
+      "team": "Analytics",
+      "allLocations": [
+        "Remote"
+      ]
+    },
+    "country": "US",
+    "descriptionPlain": "Summer internship opportunity in data analytics. You will work alongside our analytics team to derive insights from product usage data.",
+    "lists": [
+      {
+        "text": "What you'll do",
+        "content": "<li>Analyze product usage data</li><li>Build dashboards in Looker</li>"
+      }
+    ],
+    "hostedUrl": "https://jobs.lever.co/acmecorp/stu-7007-vwx-8008-yza-9009",
+    "applyUrl": "https://jobs.lever.co/acmecorp/stu-7007-vwx-8008-yza-9009/apply",
+    "workplaceType": "remote"
+  }
+]

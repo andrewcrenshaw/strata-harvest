@@ -1,0 +1,23 @@
+{
+  "data": {
+    "jobPosting": {
+      "id": "d4e5f6a7-b8c9-0123-defa-234567890123",
+      "title": "VP of Engineering",
+      "publishedDate": "2026-01-15T00:00:00.000Z",
+      "updatedAt": "2026-03-20T16:45:00.000Z",
+      "employmentType": "FullTime",
+      "locationName": "San Francisco, CA",
+      "isRemote": false,
+      "teamName": "Leadership",
+      "departmentName": "Engineering",
+      "descriptionHtml": "<div><p>Lead our engineering organization through the next phase of growth.</p><h3>What we're looking for</h3><ul><li>10+ years of engineering leadership</li><li>Experience scaling teams from 20 to 100+</li><li>Track record of shipping complex products</li></ul></div>",
+      "descriptionPlain": "Lead our engineering organization through the next phase of growth.\n\nWhat we're looking for\n- 10+ years of engineering leadership\n- Experience scaling teams from 20 to 100+\n- Track record of shipping complex products",
+      "compensationTierSummary": "$300,000 - $450,000 USD + equity",
+      "jobUrl": "https://jobs.ashbyhq.com/acmecorp/d4e5f6a7-b8c9-0123-defa-234567890123",
+      "applyUrl": "https://jobs.ashbyhq.com/acmecorp/d4e5f6a7-b8c9-0123-defa-234567890123/application",
+      "isListed": true,
+      "secondaryLocations": [],
+      "compensation": null
+    }
+  }
+}

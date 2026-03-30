@@ -1,0 +1,59 @@
+{
+  "jobs": [
+    {
+      "id": 554321,
+      "internal_job_id": 660100,
+      "title": "Data Scientist",
+      "updated_at": "2026-03-28T16:45:12+00:00",
+      "requisition_id": "DS-003",
+      "location": {
+        "name": "Austin, TX"
+      },
+      "absolute_url": "https://boards.greenhouse.io/greenleaf/jobs/554321",
+      "language": "en",
+      "metadata": [
+        {
+          "id": 99001,
+          "name": "Team",
+          "value_type": "text",
+          "value": "Analytics"
+        },
+        {
+          "id": 99002,
+          "name": "Level",
+          "value_type": "text",
+          "value": "Mid-Senior"
+        }
+      ],
+      "content": "<div><h2>About the Role</h2><p>We need a data scientist who can turn messy data into actionable insights.</p><h2>Requirements</h2><ul><li>MS in Statistics, CS, or related field</li><li>3+ years with Python, SQL, and ML frameworks</li><li>Experience with A/B testing</li></ul></div>",
+      "departments": [
+        {
+          "id": 20100,
+          "name": "Data & Analytics",
+          "parent_id": 20000,
+          "child_ids": []
+        }
+      ],
+      "offices": [
+        {
+          "id": 9100,
+          "name": "Austin HQ",
+          "location": "Austin, TX, United States",
+          "parent_id": null,
+          "child_ids": []
+        }
+      ],
+      "pay_input_ranges": [
+        {
+          "min_cents": 14000000,
+          "max_cents": 17500000,
+          "currency_type": "USD",
+          "title": "Austin Salary Range"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 1
+  }
+}

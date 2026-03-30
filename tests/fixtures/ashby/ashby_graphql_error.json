@@ -1,0 +1,19 @@
+{
+  "errors": [
+    {
+      "message": "No job board found for organization slug 'nonexistent'",
+      "locations": [
+        {
+          "line": 2,
+          "column": 3
+        }
+      ],
+      "path": [
+        "jobBoard"
+      ]
+    }
+  ],
+  "data": {
+    "jobBoard": null
+  }
+}
