@@ -1,0 +1,47 @@
+[
+  {
+    "title": "Senior Software Engineer",
+    "url": "https://jobs.lever.co/acmecorp/abc-1001-def-2002-ghi-3003",
+    "location": "San Francisco, CA",
+    "department": "Engineering",
+    "employment_type": "Full-time",
+    "description": "About the role\nWe are looking for a senior engineer to join our backend team and help build scalable distributed systems.",
+    "requirements": [
+      "5+ years of professional software development experience",
+      "Proficiency in Python or Go",
+      "Experience with distributed systems",
+      "Experience with Kubernetes",
+      "Open source contributions"
+    ],
+    "salary_range": "USD 150,000 - 220,000 per-year",
+    "posted_date": "2024-04-01T00:00:00Z",
+    "ats_provider": "lever"
+  },
+  {
+    "title": "Product Designer",
+    "url": "https://jobs.lever.co/acmecorp/jkl-4004-mno-5005-pqr-6006",
+    "location": "New York, NY",
+    "department": "Design",
+    "employment_type": "Full-time",
+    "description": "Join our design team to shape the future of our product experience.",
+    "requirements": [],
+    "salary_range": null,
+    "posted_date": "2024-03-31T00:00:00Z",
+    "ats_provider": "lever"
+  },
+  {
+    "title": "Data Analyst Intern",
+    "url": "https://jobs.lever.co/acmecorp/stu-7007-vwx-8008-yza-9009",
+    "location": "Remote",
+    "department": "Data",
+    "employment_type": "Intern",
+    "description": "Summer internship opportunity in data analytics. You will work alongside our analytics team to derive insights from product usage data.",
+    "requirements": [
+      "Analyze product usage data",
+      "Build dashboards in Looker"
+    ],
+    "salary_range": null,
+    "posted_date": "2024-03-30T00:00:00Z",
+    "ats_provider": "lever"
+  }
+]

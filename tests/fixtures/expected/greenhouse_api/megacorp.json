@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Staff Backend Engineer",
+    "url": "https://boards.greenhouse.io/megacorp/jobs/900001",
+    "location": "London, UK",
+    "department": "Payments",
+    "employment_type": null,
+    "description": "Lead backend architecture for our payments platform.",
+    "requirements": [],
+    "salary_range": "GBP 100,000 - 140,000",
+    "posted_date": "2026-03-25T08:00:00Z",
+    "ats_provider": "greenhouse"
+  },
+  {
+    "title": "Marketing Coordinator (Contract)",
+    "url": "https://boards.greenhouse.io/megacorp/jobs/900002",
+    "location": "Remote — US Only",
+    "department": null,
+    "employment_type": null,
+    "description": null,
+    "requirements": [],
+    "salary_range": null,
+    "posted_date": "2026-03-22T12:30:00Z",
+    "ats_provider": "greenhouse"
+  },
+  {
+    "title": "フロントエンドエンジニア",
+    "url": "https://boards.greenhouse.io/megacorp/jobs/900003",
+    "location": "東京",
+    "department": "Frontend",
+    "employment_type": null,
+    "description": "フロントエンドエンジニアを募集しています。React, TypeScript経験者歓迎。",
+    "requirements": [],
+    "salary_range": "JPY 6,000,000 - 9,000,000",
+    "posted_date": "2026-03-10T04:00:00+09:00",
+    "ats_provider": "greenhouse"
+  },
+  {
+    "title": "Head of People",
+    "url": "https://boards.greenhouse.io/megacorp/jobs/900004",
+    "location": "New York, NY or London, UK",
+    "department": "People",
+    "employment_type": null,
+    "description": "About UsMegaCorp is a global fintech company.The RoleLead our People team across 3 continents.",
+    "requirements": [],
+    "salary_range": null,
+    "posted_date": "2026-01-15T10:00:00Z",
+    "ats_provider": "greenhouse"
+  }
+]

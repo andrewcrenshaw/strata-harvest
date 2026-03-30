@@ -1,0 +1,46 @@
+[
+  {
+    "title": "Senior Software Engineer",
+    "url": "https://boards.greenhouse.io/acmecorp/jobs/127817",
+    "location": "New York, NY",
+    "department": "Engineering",
+    "employment_type": null,
+    "description": "We're looking for a Senior Software Engineer to join our platform team.Requirements5+ years of experience with Python or GoExperience with distributed systemsBenefitsCompetitive salaryRemote-friendly",
+    "requirements": [
+      "5+ years of experience with Python or Go",
+      "Experience with distributed systems",
+      "Competitive salary",
+      "Remote-friendly"
+    ],
+    "salary_range": "USD 180,000 - 220,000",
+    "posted_date": "2026-03-15T10:55:28-05:00",
+    "ats_provider": "greenhouse"
+  },
+  {
+    "title": "Product Designer",
+    "url": "https://boards.greenhouse.io/acmecorp/jobs/128901",
+    "location": "San Francisco, CA",
+    "department": "Design",
+    "employment_type": null,
+    "description": "Join our design team and shape the future of our product experience.What you'll doLead end-to-end design for key featuresCollaborate closely with engineering and product",
+    "requirements": [
+      "Lead end-to-end design for key features",
+      "Collaborate closely with engineering and product"
+    ],
+    "salary_range": "USD 150,000 - 190,000",
+    "posted_date": "2026-03-20T14:30:00-05:00",
+    "ats_provider": "greenhouse"
+  },
+  {
+    "title": "General Application — Engineering",
+    "url": "https://boards.greenhouse.io/acmecorp/jobs/129050",
+    "location": "Remote",
+    "department": "Engineering",
+    "employment_type": null,
+    "description": "Don't see a role that fits? Submit a general application and we'll reach out when something opens up.",
+    "requirements": [],
+    "salary_range": null,
+    "posted_date": "2026-02-01T09:00:00-05:00",
+    "ats_provider": "greenhouse"
+  }
+]
