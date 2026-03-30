@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from strata_harvest.detector import detect_ats
-from strata_harvest.models import ScrapeResult
+from strata_harvest.models import JobListing, ScrapeResult
 from strata_harvest.parsers.base import BaseParser
 from strata_harvest.utils.hashing import content_hash
 from strata_harvest.utils.http import safe_fetch
@@ -60,7 +60,7 @@ def create_crawler(
     return Crawler(rate_limit=rate_limit, timeout=timeout, user_agent=user_agent)
 
 
-async def harvest(url: str, *, timeout: float = 30.0) -> list:
+async def harvest(url: str, *, timeout: float = 30.0) -> list[JobListing]:
     """One-shot convenience: scrape a URL and return job listings."""
     crawler = create_crawler(timeout=timeout)
     result = await crawler.scrape(url)

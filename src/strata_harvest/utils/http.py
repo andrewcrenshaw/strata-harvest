@@ -54,7 +54,7 @@ async def safe_fetch(
         if attempt < max_retries:
             import asyncio
 
-            await asyncio.sleep(_BACKOFF_FACTOR ** attempt)
+            await asyncio.sleep(_BACKOFF_FACTOR**attempt)
 
     elapsed = (time.monotonic() - start) * 1000
     return FetchResult(url=url, error=last_error, elapsed_ms=elapsed)

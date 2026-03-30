@@ -32,7 +32,7 @@ class JobListing(BaseModel):
     employment_type: str | None = None
     external_id: str | None = None
     posted_at: datetime | None = None
-    raw_data: dict | None = Field(default=None, exclude=True)
+    raw_data: dict[str, object] | None = Field(default=None, exclude=True)
 
 
 class FetchResult(BaseModel):
