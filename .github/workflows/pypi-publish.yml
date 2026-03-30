@@ -1,0 +1,39 @@
+# Publish to PyPI when a version tag is pushed (e.g. v0.1.0).
+#
+# Setup (one-time on PyPI): Project → Publishing → Add a new pending publisher → GitHub
+# (repository, workflow: Publish to PyPI, environment optional). OIDC is used; no API token.
+# Fallback: set repository secret PYPI_API_TOKEN if not using trusted publishing.
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Trusted publishing (OIDC): do not set `password`. For token upload, add:
+        # with: { password: ${{ secrets.PYPI_API_TOKEN }} }

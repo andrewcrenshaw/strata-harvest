@@ -68,9 +68,7 @@ def list_fixtures(provider: str, *, suffix: str | None = None) -> list[str]:
     if not provider_dir.is_dir():
         return []
     names = sorted(
-        f.name
-        for f in provider_dir.iterdir()
-        if f.is_file() and not f.name.startswith(".")
+        f.name for f in provider_dir.iterdir() if f.is_file() and not f.name.startswith(".")
     )
     if suffix:
         names = [n for n in names if n.endswith(suffix)]

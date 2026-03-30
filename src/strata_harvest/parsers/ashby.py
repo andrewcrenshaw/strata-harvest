@@ -254,9 +254,7 @@ class AshbyParser(BaseParser):
             department=posting.get("departmentName"),
             employment_type=posting.get("employmentType"),
             description=description or None,
-            requirements=_extract_requirements_from_html(
-                posting.get("descriptionHtml", "")
-            ),
+            requirements=_extract_requirements_from_html(posting.get("descriptionHtml", "")),
             salary_range=posting.get("compensationTierSummary"),
             posted_date=_parse_iso_date(posting.get("publishedDate")),
             ats_provider=ATSProvider.ASHBY,
@@ -266,18 +264,19 @@ class AshbyParser(BaseParser):
     @staticmethod
     def _build_location(posting: dict[str, Any]) -> str | None:
         """Combine primary location with remote flag and secondary locations."""
-        primary = posting.get("locationName")
+        primary_raw = posting.get("locationName")
         is_remote = posting.get("isRemote", False)
 
-        if not primary and is_remote:
+        if not primary_raw and is_remote:
             return "Remote"
-        if not primary:
+        if not primary_raw:
             return None
 
-        if is_remote and "remote" not in primary.lower():
-            return f"{primary} (Remote)"
+        loc = str(primary_raw)
+        if is_remote and "remote" not in loc.lower():
+            return f"{loc} (Remote)"
 
-        return primary
+        return loc
 
 
 def _extract_requirements_from_html(html: str) -> list[str]:

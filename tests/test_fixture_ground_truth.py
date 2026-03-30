@@ -127,9 +127,7 @@ class TestLeverGroundTruth:
 
     def test_all_lever_fixtures_have_expected(self) -> None:
         for name in ["lever_multi_postings.json", "lever_single_posting.json"]:
-            assert has_expected("lever", name), (
-                f"Missing expected output for lever/{name}"
-            )
+            assert has_expected("lever", name), f"Missing expected output for lever/{name}"
 
     def test_at_least_two_fixtures(self) -> None:
         """AC: 2 Lever API responses."""
@@ -167,9 +165,7 @@ class TestAshbyGroundTruth:
 
     def test_all_ashby_fixtures_have_expected(self) -> None:
         for name in ["ashby_job_board_response.json", "ashby_single_posting.json"]:
-            assert has_expected("ashby", name), (
-                f"Missing expected output for ashby/{name}"
-            )
+            assert has_expected("ashby", name), f"Missing expected output for ashby/{name}"
 
     def test_at_least_two_fixtures(self) -> None:
         """AC: 2 Ashby responses."""
@@ -191,15 +187,11 @@ class TestCareerPageFixtures:
         """AC: 3 raw HTML career pages with no recognized ATS."""
         html_files = list_fixtures("career_pages", suffix=".html")
         no_ats = [
-            f for f in html_files
-            if not any(
-                ats in f
-                for ats in ("greenhouse", "lever", "ashby", "workday", "icims")
-            )
+            f
+            for f in html_files
+            if not any(ats in f for ats in ("greenhouse", "lever", "ashby", "workday", "icims"))
         ]
-        assert len(no_ats) >= 3, (
-            f"Expected >= 3 no-ATS HTML pages, found {len(no_ats)}: {no_ats}"
-        )
+        assert len(no_ats) >= 3, f"Expected >= 3 no-ATS HTML pages, found {len(no_ats)}: {no_ats}"
 
     def test_each_no_ats_page_has_expected_output(self) -> None:
         """Each no-ATS career page has a human-annotated ground truth file."""

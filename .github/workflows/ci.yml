@@ -37,26 +37,47 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: mypy src/
 
-  test-verification:
-    name: Tests (verification)
-    if: github.ref != 'refs/heads/main'
+  package-build:
+    name: Package build (sdist + wheel)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install build
+      - run: python -m build
+      - run: pip install dist/strata_harvest-*.whl
+      - run: python -c "import strata_harvest; print(strata_harvest.__version__)"
+
+  test-verification:
+    name: Tests (verification, Python ${{ matrix.python-version }})
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: pytest -m "not integration" --tb=short -q
 
   test-full:
-    name: Tests (full suite)
+    name: Tests (full suite, Python ${{ matrix.python-version }})
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev,llm]"
       - run: pytest --tb=short -q --cov=src/strata_harvest --cov-report=term-missing

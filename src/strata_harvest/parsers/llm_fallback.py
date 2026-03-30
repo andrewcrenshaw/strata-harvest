@@ -14,7 +14,10 @@ import logging
 import re
 from typing import Any
 
-import litellm
+try:
+    import litellm
+except ImportError:  # pragma: no cover - base install without ``[llm]`` extra
+    litellm = None  # type: ignore[assignment]
 
 from strata_harvest.models import ATSProvider, JobListing
 from strata_harvest.parsers.base import BaseParser
@@ -104,6 +107,10 @@ class LLMFallbackParser(BaseParser):
 
         cleaned = _clean_html(content)
         if not cleaned.strip():
+            return []
+
+        if litellm is None:
+            logger.warning("LLM fallback requires the llm extra: pip install strata-harvest[llm]")
             return []
 
         try:

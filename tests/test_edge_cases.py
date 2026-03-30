@@ -123,11 +123,7 @@ class TestZeroListings:
         assert result == []
 
     def test_ashby_zero_postings(self) -> None:
-        content = json.dumps({
-            "data": {
-                "jobBoard": {"title": "Test Board", "jobPostings": []}
-            }
-        })
+        content = json.dumps({"data": {"jobBoard": {"title": "Test Board", "jobPostings": []}}})
         parser = AshbyParser()
         result = parser.parse(content, url="https://jobs.ashbyhq.com/co")
         assert result == []
@@ -167,9 +163,7 @@ class TestATSAPIDown:
     async def test_safe_fetch_connection_refused(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=httpx.ConnectError("Connection refused")
-            )
+            instance.request = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -192,9 +186,7 @@ class TestATSAPIDown:
             patch("strata_harvest.crawler.detect_ats") as mock_detect,
             patch("strata_harvest.crawler.safe_fetch") as mock_fetch,
         ):
-            mock_detect.return_value = ATSInfo(
-                provider=ATSProvider.GREENHOUSE, confidence=0.9
-            )
+            mock_detect.return_value = ATSInfo(provider=ATSProvider.GREENHOUSE, confidence=0.9)
             mock_fetch.return_value = error_result
             crawler = create_crawler()
             result = await crawler.scrape(url)
@@ -214,9 +206,7 @@ class TestATSAPIDown:
             new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = error_result
-            listings = await GreenhouseParser.fetch_all(
-                "https://boards.greenhouse.io/down"
-            )
+            listings = await GreenhouseParser.fetch_all("https://boards.greenhouse.io/down")
         assert listings == []
 
     async def test_lever_fetch_all_api_unavailable(self) -> None:
@@ -242,9 +232,7 @@ class TestATSAPIDown:
             new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = error_result
-            listings = await AshbyParser.fetch_all(
-                "https://jobs.ashbyhq.com/downcorp"
-            )
+            listings = await AshbyParser.fetch_all("https://jobs.ashbyhq.com/downcorp")
         assert listings == []
 
     async def test_detect_ats_fetch_failure_returns_unknown(self) -> None:
@@ -274,9 +262,7 @@ class TestTimeoutOnSlowPage:
     async def test_safe_fetch_timeout(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=httpx.TimeoutException("Read timed out")
-            )
+            instance.request = AsyncMock(side_effect=httpx.TimeoutException("Read timed out"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -311,16 +297,12 @@ class TestTimeoutOnSlowPage:
         """Timeout with retries exhausted still returns structured error."""
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=httpx.TimeoutException("Read timed out")
-            )
+            instance.request = AsyncMock(side_effect=httpx.TimeoutException("Read timed out"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await safe_fetch(
-                    "https://slow.example.com", retries=2
-                )
+                result = await safe_fetch("https://slow.example.com", retries=2)
 
         assert result.ok is False
         assert instance.request.call_count == 3
@@ -345,9 +327,7 @@ class TestTimeoutOnSlowPage:
             mock_client.return_value = instance
 
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await safe_fetch(
-                    "https://slow.example.com", retries=1
-                )
+                result = await safe_fetch("https://slow.example.com", retries=1)
 
         assert result.ok is True
         assert instance.request.call_count == 2
@@ -483,9 +463,7 @@ class TestScrapeBatchWorkerException:
         """If a scrape raises an unexpected exception, the batch still returns a result."""
         call_count = 0
 
-        async def exploding_scrape(
-            self: Crawler, url: str, **kwargs: object
-        ) -> ScrapeResult:
+        async def exploding_scrape(self: Crawler, url: str, **kwargs: object) -> ScrapeResult:
             nonlocal call_count
             call_count += 1
             if "fail" in url:

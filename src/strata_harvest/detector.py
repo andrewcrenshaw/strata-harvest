@@ -48,7 +48,25 @@ def _extract_api_url(url: str, provider: ATSProvider, template: str | None) -> s
 
 
 def detect_from_url(url: str) -> ATSInfo:
-    """Detect ATS from URL patterns alone. No network call."""
+    """Infer ATS from the URL string only (no I/O).
+
+    Parameters
+    ----------
+    url:
+        Career page or board URL to inspect.
+
+    Returns
+    -------
+    ATSInfo
+        High-confidence match when a known host pattern applies; otherwise
+        defaults with :attr:`~ATSInfo.provider` ``UNKNOWN``.
+
+    Examples
+    --------
+    >>> info = detect_from_url("https://boards.greenhouse.io/acme/jobs")
+    >>> info.provider.value
+    'greenhouse'
+    """
     for pattern, provider, api_template in _URL_PATTERNS:
         if pattern.search(url):
             return ATSInfo(
@@ -61,16 +79,32 @@ def detect_from_url(url: str) -> ATSInfo:
 
 
 def detect_from_dom(html: str) -> ATSInfo:
-    """Detect ATS by scanning HTML content for known markers."""
+    """Infer ATS by scanning raw HTML for vendor-specific markers.
+
+    Parameters
+    ----------
+    html:
+        Full page HTML (or a large fragment) to scan.
+
+    Returns
+    -------
+    ATSInfo
+        Best matching signature by confidence; unknown if nothing matched.
+
+    Examples
+    --------
+    >>> html = '<script src="https://boards.greenhouse.io/embed/job_board"></script>'
+    >>> detect_from_dom(html).provider.value
+    'greenhouse'
+    """
     best: ATSInfo = ATSInfo()
     for pattern, provider, confidence in _DOM_SIGNATURES:
-        if pattern.search(html):
-            if confidence > best.confidence:
-                best = ATSInfo(
-                    provider=provider,
-                    confidence=confidence,
-                    detection_method="dom_probe",
-                )
+        if pattern.search(html) and confidence > best.confidence:
+            best = ATSInfo(
+                provider=provider,
+                confidence=confidence,
+                detection_method="dom_probe",
+            )
     return best
 
 
@@ -81,11 +115,42 @@ async def detect_ats(
     timeout: float = 15.0,
     user_agent: str | None = None,
 ) -> ATSInfo:
-    """Detect which ATS provider a career page uses.
+    """Detect which ATS powers a career page.
 
-    Tries URL pattern matching first (instant, no network).
-    Falls back to DOM probing on the HTML content.
-    Pass *html* to skip the fetch when you already have page content.
+    Order of operations:
+
+    #. :func:`detect_from_url` — instant, no network.
+    #. If still unknown and *html* is omitted, :func:`~strata_harvest.utils.http.safe_fetch`.
+    #. :func:`detect_from_dom` on the HTML body.
+
+    Parameters
+    ----------
+    url:
+        Page URL (used for URL heuristics and, when needed, fetching).
+    html:
+        Optional pre-fetched HTML to avoid a network round trip.
+    timeout:
+        HTTP timeout when this function must fetch the page.
+    user_agent:
+        Optional ``User-Agent`` header for the internal fetch.
+
+    Returns
+    -------
+    ATSInfo
+        Best-effort detection; may be ``UNKNOWN`` with low confidence.
+
+    Notes
+    -----
+    Transport failures surface as empty :class:`~strata_harvest.models.ATSInfo`
+    results rather than raised exceptions.
+
+    Examples
+    --------
+    >>> import asyncio
+    >>> async def main() -> None:
+    ...     info = await detect_ats("https://jobs.lever.co/example")
+    ...     assert info.provider.value == "lever"
+    >>> asyncio.run(main())  # doctest: +SKIP
     """
     url_result = detect_from_url(url)
     if url_result.provider != ATSProvider.UNKNOWN:

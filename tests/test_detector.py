@@ -10,6 +10,7 @@ Covers:
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from strata_harvest.detector import detect_ats, detect_from_dom, detect_from_url
 from strata_harvest.models import ATSInfo, ATSProvider
@@ -40,9 +41,9 @@ class TestATSInfo:
         assert info.confidence == 1.0
 
     def test_confidence_rejects_out_of_range(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ATSInfo(confidence=1.5)
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ATSInfo(confidence=-0.1)
 
     def test_serialization_round_trip(self) -> None:
@@ -149,7 +150,9 @@ class TestDOMProbing:
         assert info.confidence == 0.0
 
     def test_best_match_wins(self) -> None:
-        html = '<div class="lever-jobs-container"></div><script src="boards.greenhouse.io/x"></script>'
+        html = (
+            '<div class="lever-jobs-container"></div><script src="boards.greenhouse.io/x"></script>'
+        )
         info = detect_from_dom(html)
         assert info.provider in (ATSProvider.GREENHOUSE, ATSProvider.LEVER)
         assert info.confidence > 0.7
@@ -171,5 +174,8 @@ class TestDetectATS:
         assert info.detection_method == "dom_probe"
 
     async def test_unknown_url_and_html(self) -> None:
-        info = await detect_ats("https://example.com/careers", html="<html><body>No ATS here</body></html>")
+        info = await detect_ats(
+            "https://example.com/careers",
+            html="<html><body>No ATS here</body></html>",
+        )
         assert info.provider == ATSProvider.UNKNOWN

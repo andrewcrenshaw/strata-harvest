@@ -154,9 +154,7 @@ class LeverParser(BaseParser):
                 raise ValueError(msg)
             hosted_url = f"https://jobs.lever.co/unknown/{posting_id}"
 
-        description = posting.get("descriptionPlain") or _strip_html(
-            posting.get("description", "")
-        )
+        description = posting.get("descriptionPlain") or _strip_html(posting.get("description", ""))
 
         return JobListing(
             title=title,

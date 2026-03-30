@@ -76,8 +76,7 @@ class GreenhouseParser(BaseParser):
         expected = data.get("meta", {}).get("total")
         if expected is not None and len(results) != expected:
             logger.info(
-                "Greenhouse parsed %d of %d listed jobs "
-                "(some may have been skipped)",
+                "Greenhouse parsed %d of %d listed jobs (some may have been skipped)",
                 len(results),
                 expected,
             )
@@ -201,18 +200,23 @@ class GreenhouseParser(BaseParser):
             return None
 
         leaf = next(
-            (d["name"] for d in departments
-             if isinstance(d, dict) and "name" in d and not d.get("child_ids")),
+            (
+                d["name"]
+                for d in departments
+                if isinstance(d, dict) and "name" in d and not d.get("child_ids")
+            ),
             None,
         )
-        if leaf:
-            return leaf
+        if leaf is not None:
+            return str(leaf)
 
         first = next(
             (d["name"] for d in departments if isinstance(d, dict) and "name" in d),
             None,
         )
-        return first
+        if first is None:
+            return None
+        return str(first)
 
     @staticmethod
     def _format_salary(pay_ranges: list[dict[str, Any]] | None) -> str | None:
@@ -248,6 +252,7 @@ class GreenhouseParser(BaseParser):
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
+
 
 def _strip_html(html: str) -> str:
     """Remove HTML tags, returning plain text."""

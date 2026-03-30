@@ -43,110 +43,118 @@ def _make_llm_response(jobs: list[dict[str, Any]]) -> MagicMock:
 # Startup careers fixture (3 jobs, inline cards)
 # ------------------------------------------------------------------
 
-STARTUP_LLM_RESPONSE = _make_llm_response([
-    {
-        "title": "Senior Python Engineer",
-        "url": "https://novatech-labs.com/careers/senior-python-engineer",
-        "location": "San Francisco, CA (Hybrid)",
-        "department": "Engineering",
-        "employment_type": "Full-time",
-        "description": "Lead backend development for our battery management platform.",
-        "salary_range": "$180,000 - $220,000",
-    },
-    {
-        "title": "Product Designer",
-        "url": "https://novatech-labs.com/careers/product-designer",
-        "location": "Remote (US)",
-        "department": "Design",
-        "employment_type": "Full-time",
-        "description": "Own the end-to-end design process for our monitoring dashboard.",
-    },
-    {
-        "title": "Data Scientist Intern",
-        "url": "https://novatech-labs.com/careers/data-scientist-intern",
-        "location": "Austin, TX",
-        "department": "Data Science",
-        "employment_type": "Internship",
-        "description": "Summer 2026 internship. Build predictive models for battery degradation.",
-    },
-])
+STARTUP_LLM_RESPONSE = _make_llm_response(
+    [
+        {
+            "title": "Senior Python Engineer",
+            "url": "https://novatech-labs.com/careers/senior-python-engineer",
+            "location": "San Francisco, CA (Hybrid)",
+            "department": "Engineering",
+            "employment_type": "Full-time",
+            "description": "Lead backend development for our battery management platform.",
+            "salary_range": "$180,000 - $220,000",
+        },
+        {
+            "title": "Product Designer",
+            "url": "https://novatech-labs.com/careers/product-designer",
+            "location": "Remote (US)",
+            "department": "Design",
+            "employment_type": "Full-time",
+            "description": "Own the end-to-end design process for our monitoring dashboard.",
+        },
+        {
+            "title": "Data Scientist Intern",
+            "url": "https://novatech-labs.com/careers/data-scientist-intern",
+            "location": "Austin, TX",
+            "department": "Data Science",
+            "employment_type": "Internship",
+            "description": (
+                "Summer 2026 internship. Build predictive models for battery degradation."
+            ),
+        },
+    ]
+)
 
 # ------------------------------------------------------------------
 # Table careers fixture (4 jobs, tabular layout)
 # ------------------------------------------------------------------
 
-TABLE_LLM_RESPONSE = _make_llm_response([
-    {
-        "title": "DevOps Engineer",
-        "url": "https://meridianhealth.com/jobs/devops-engineer",
-        "location": "Chicago, IL",
-        "department": "Infrastructure",
-        "employment_type": "Full-time",
-    },
-    {
-        "title": "Clinical Data Analyst",
-        "url": "https://meridianhealth.com/jobs/clinical-data-analyst",
-        "location": "Remote",
-        "department": "Analytics",
-        "employment_type": "Full-time",
-    },
-    {
-        "title": "Mobile Developer (iOS)",
-        "url": "https://meridianhealth.com/jobs/ios-developer",
-        "location": "Boston, MA",
-        "department": "Engineering",
-        "employment_type": "Contract",
-    },
-    {
-        "title": "VP of Product",
-        "url": "https://meridianhealth.com/jobs/vp-product",
-        "location": "New York, NY",
-        "department": "Product",
-        "employment_type": "Full-time",
-    },
-])
+TABLE_LLM_RESPONSE = _make_llm_response(
+    [
+        {
+            "title": "DevOps Engineer",
+            "url": "https://meridianhealth.com/jobs/devops-engineer",
+            "location": "Chicago, IL",
+            "department": "Infrastructure",
+            "employment_type": "Full-time",
+        },
+        {
+            "title": "Clinical Data Analyst",
+            "url": "https://meridianhealth.com/jobs/clinical-data-analyst",
+            "location": "Remote",
+            "department": "Analytics",
+            "employment_type": "Full-time",
+        },
+        {
+            "title": "Mobile Developer (iOS)",
+            "url": "https://meridianhealth.com/jobs/ios-developer",
+            "location": "Boston, MA",
+            "department": "Engineering",
+            "employment_type": "Contract",
+        },
+        {
+            "title": "VP of Product",
+            "url": "https://meridianhealth.com/jobs/vp-product",
+            "location": "New York, NY",
+            "department": "Product",
+            "employment_type": "Full-time",
+        },
+    ]
+)
 
 # ------------------------------------------------------------------
 # SPA-rendered careers fixture (4 jobs, JS-rendered)
 # ------------------------------------------------------------------
 
-SPA_LLM_RESPONSE = _make_llm_response([
-    {
-        "title": "Staff ML Infrastructure Engineer",
-        "url": "https://cloudburst.ai/careers/eng-001",
-        "location": "San Francisco, CA",
-        "department": "Engineering",
-        "employment_type": "Full-time",
-        "salary_range": "$250,000 - $320,000 + equity",
-        "description": "Design and scale distributed training infrastructure.",
-        "requirements": [
-            "7+ years in distributed systems or ML infrastructure",
-            "Deep experience with CUDA, NCCL, or similar GPU programming",
-        ],
-    },
-    {
-        "title": "Senior Frontend Engineer",
-        "url": "https://cloudburst.ai/careers/eng-002",
-        "location": "Remote (US/EU)",
-        "department": "Engineering",
-        "employment_type": "Full-time",
-        "salary_range": "$180,000 - $230,000 + equity",
-    },
-    {
-        "title": "Solutions Architect",
-        "url": "https://cloudburst.ai/careers/gtm-001",
-        "location": "New York, NY or Remote",
-        "department": "Go-to-Market",
-        "employment_type": "Full-time",
-    },
-    {
-        "title": "Technical Writer",
-        "url": "https://cloudburst.ai/careers/gtm-002",
-        "location": "Remote",
-        "department": "Go-to-Market",
-        "employment_type": "Part-time",
-    },
-])
+SPA_LLM_RESPONSE = _make_llm_response(
+    [
+        {
+            "title": "Staff ML Infrastructure Engineer",
+            "url": "https://cloudburst.ai/careers/eng-001",
+            "location": "San Francisco, CA",
+            "department": "Engineering",
+            "employment_type": "Full-time",
+            "salary_range": "$250,000 - $320,000 + equity",
+            "description": "Design and scale distributed training infrastructure.",
+            "requirements": [
+                "7+ years in distributed systems or ML infrastructure",
+                "Deep experience with CUDA, NCCL, or similar GPU programming",
+            ],
+        },
+        {
+            "title": "Senior Frontend Engineer",
+            "url": "https://cloudburst.ai/careers/eng-002",
+            "location": "Remote (US/EU)",
+            "department": "Engineering",
+            "employment_type": "Full-time",
+            "salary_range": "$180,000 - $230,000 + equity",
+        },
+        {
+            "title": "Solutions Architect",
+            "url": "https://cloudburst.ai/careers/gtm-001",
+            "location": "New York, NY or Remote",
+            "department": "Go-to-Market",
+            "employment_type": "Full-time",
+        },
+        {
+            "title": "Technical Writer",
+            "url": "https://cloudburst.ai/careers/gtm-002",
+            "location": "Remote",
+            "department": "Go-to-Market",
+            "employment_type": "Part-time",
+        },
+    ]
+)
 
 
 # ------------------------------------------------------------------
@@ -362,7 +370,6 @@ class TestLLMFallbackProvider:
 
 @pytest.mark.verification
 class TestLLMFallbackErrorHandling:
-
     @patch("strata_harvest.parsers.llm_fallback.litellm")
     def test_llm_exception_returns_empty(self, mock_litellm: MagicMock) -> None:
         mock_litellm.completion.side_effect = Exception("API error")
@@ -407,10 +414,12 @@ class TestLLMFallbackErrorHandling:
 
     @patch("strata_harvest.parsers.llm_fallback.litellm")
     def test_job_missing_title_skipped(self, mock_litellm: MagicMock) -> None:
-        mock_litellm.completion.return_value = _make_llm_response([
-            {"url": "https://example.com/job1"},
-            {"title": "Valid Job", "url": "https://example.com/job2"},
-        ])
+        mock_litellm.completion.return_value = _make_llm_response(
+            [
+                {"url": "https://example.com/job1"},
+                {"title": "Valid Job", "url": "https://example.com/job2"},
+            ]
+        )
         parser = LLMFallbackParser()
         result = parser.parse("<html><body>Jobs</body></html>", url="https://example.com")
         assert len(result) == 1
@@ -418,10 +427,12 @@ class TestLLMFallbackErrorHandling:
 
     @patch("strata_harvest.parsers.llm_fallback.litellm")
     def test_job_missing_url_skipped(self, mock_litellm: MagicMock) -> None:
-        mock_litellm.completion.return_value = _make_llm_response([
-            {"title": "No URL Job"},
-            {"title": "Valid Job", "url": "https://example.com/job2"},
-        ])
+        mock_litellm.completion.return_value = _make_llm_response(
+            [
+                {"title": "No URL Job"},
+                {"title": "Valid Job", "url": "https://example.com/job2"},
+            ]
+        )
         parser = LLMFallbackParser()
         result = parser.parse("<html><body>Jobs</body></html>", url="https://example.com")
         assert len(result) == 1

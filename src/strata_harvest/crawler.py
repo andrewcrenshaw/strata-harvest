@@ -27,7 +27,27 @@ _DEFAULT_CONCURRENCY: int = 5
 
 
 class Crawler:
-    """Configured crawler for repeated career page scraping."""
+    """Stateful crawler for repeated career-page scraping with shared settings.
+
+    Obtain instances via :func:`create_crawler` rather than calling this
+    constructor directly, so defaults stay consistent across releases.
+
+    Parameters
+    ----------
+    rate_limit:
+        Maximum requests per second (default ``0.5`` → one request every 2 s).
+    timeout:
+        Per-request HTTP timeout in seconds.
+    user_agent:
+        Optional ``User-Agent`` header for fetches.
+    headless:
+        Reserved for future headless-browser rendering.
+    proxy:
+        Reserved for future HTTP(S) proxy support.
+    llm_provider:
+        LiteLLM model id for the LLM fallback parser when ATS is unknown
+        (e.g. ``openai/gpt-4o-mini``). Requires the ``llm`` extra.
+    """
 
     def __init__(
         self,
@@ -47,7 +67,40 @@ class Crawler:
         self._llm_provider = llm_provider
 
     async def scrape(self, url: str, *, previous_hash: str | None = None) -> ScrapeResult:
-        """Scrape a career page URL and return structured listings."""
+        """Scrape a career page and return structured results.
+
+        Detects the ATS, fetches HTML, parses listings, and computes a content
+        hash for change detection when *previous_hash* is supplied.
+
+        Parameters
+        ----------
+        url:
+            Career page or job-board URL to scrape.
+        previous_hash:
+            If set, compared to the new content hash to populate
+            :attr:`ScrapeResult.changed`.
+
+        Returns
+        -------
+        ScrapeResult
+            Parsed jobs, ATS metadata, timing, and optional error string.
+
+        Raises
+        ------
+        Exception
+            Rarely, parser or dependency code may raise; HTTP failures are
+            represented on the result instead of raising.
+
+        Examples
+        --------
+        >>> import asyncio
+        >>> from strata_harvest.crawler import create_crawler
+        >>> async def main() -> None:
+        ...     c = create_crawler(timeout=30.0)
+        ...     r = await c.scrape("https://boards.greenhouse.io/example/jobs")
+        ...     assert r.url.endswith("/jobs")
+        >>> asyncio.run(main())  # doctest: +SKIP
+        """
         await self._rate_limiter.acquire()
 
         ats_info = await detect_ats(url, timeout=self._timeout, user_agent=self._user_agent)
@@ -81,12 +134,30 @@ class Crawler:
         urls: list[str],
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> AsyncIterator[ScrapeResult]:
-        """Scrape multiple URLs concurrently, yielding results as they complete.
+        """Scrape multiple URLs concurrently.
 
-        Uses an asyncio.Semaphore to cap parallelism at *concurrency*.
-        Each URL is scraped via ``self.scrape()`` which already applies
-        rate limiting, so the semaphore controls task concurrency while
-        the rate limiter controls request pacing.
+        Uses an :class:`asyncio.Semaphore` to cap parallelism at
+        *concurrency*. Each URL is scraped via :meth:`scrape`, which applies
+        the crawler's rate limiter; the semaphore bounds concurrent tasks while
+        the limiter paces HTTP requests.
+
+        Parameters
+        ----------
+        urls:
+            URLs to scrape (empty list yields nothing).
+        concurrency:
+            Maximum concurrent scrape tasks.
+
+        Yields
+        ------
+        ScrapeResult
+            One result per input URL (order not guaranteed vs. input order).
+
+        Raises
+        ------
+        Exception
+            Worker failures are captured as :class:`ScrapeResult` with
+            ``error`` set where possible; unexpected errors may still propagate.
         """
         if not urls:
             return
@@ -101,9 +172,7 @@ class Crawler:
                     result = await self.scrape(url)
                     await queue.put(result)
             except Exception as exc:
-                await queue.put(
-                    ScrapeResult(url=url, error=f"{type(exc).__name__}: {exc}")
-                )
+                await queue.put(ScrapeResult(url=url, error=f"{type(exc).__name__}: {exc}"))
 
         tasks = [asyncio.create_task(_worker(u)) for u in urls]
 
@@ -130,22 +199,35 @@ def create_crawler(
     proxy: str | None = None,
     llm_provider: str | None = None,
 ) -> Crawler:
-    """Create a configured crawler instance.
+    """Build a :class:`Crawler` with explicit tuning knobs.
 
     Parameters
     ----------
     rate_limit:
-        Max requests per second (default 0.5 → one request every 2 s).
+        Max requests per second (default ``0.5`` → one request every 2 s).
     timeout:
         Per-request HTTP timeout in seconds.
     user_agent:
-        Custom User-Agent header.
+        Custom ``User-Agent`` header for fetches.
     headless:
-        Whether to use a headless browser for JS-rendered pages (future).
+        Reserved for headless-browser rendering (not yet implemented).
     proxy:
-        HTTP(S) proxy URL (future).
+        Reserved for HTTP(S) proxy (not yet implemented).
     llm_provider:
-        LiteLLM model string for the LLM fallback parser (e.g. ``openai/gpt-4o-mini``).
+        LiteLLM model string for the LLM fallback parser when the ATS cannot
+        be identified (e.g. ``openai/gpt-4o-mini``). Install ``strata-harvest[llm]``.
+
+    Returns
+    -------
+    Crawler
+        Configured instance; use :meth:`Crawler.scrape` or :meth:`Crawler.scrape_batch`.
+
+    Examples
+    --------
+    >>> from strata_harvest.crawler import create_crawler
+    >>> crawler = create_crawler(rate_limit=0.25, timeout=45.0)
+    >>> crawler  # doctest: +ELLIPSIS
+    <strata_harvest.crawler.Crawler object at ...>
     """
     return Crawler(
         rate_limit=rate_limit,
@@ -158,9 +240,41 @@ def create_crawler(
 
 
 async def harvest(url: str, *, timeout: float = _DEFAULT_TIMEOUT) -> list[JobListing]:
-    """One-shot convenience: scrape a URL and return job listings.
+    """Scrape a career page once and return only the parsed job rows.
 
-    Auto-detects the ATS provider and uses the appropriate parser.
+    Builds a default :class:`Crawler`, runs :meth:`Crawler.scrape`, and returns
+    ``result.jobs``. For full diagnostics (HTTP errors, ATS detection, timing),
+    use :func:`create_crawler` and inspect :class:`ScrapeResult`.
+
+    Parameters
+    ----------
+    url:
+        Career page or job-board URL.
+    timeout:
+        Per-request HTTP timeout in seconds passed to the internal crawler.
+
+    Returns
+    -------
+    list[JobListing]
+        Parsed postings. Empty when the fetch failed, parsing found no rows,
+        or the page indicated an error (same semantics as filtering
+        :attr:`ScrapeResult.jobs` after a failed scrape).
+
+    Raises
+    ------
+    Exception
+        The HTTP stack does not raise on transport errors (they appear on
+        :class:`ScrapeResult` when using :meth:`Crawler.scrape`). Parser or
+        dependency bugs may still raise.
+
+    Examples
+    --------
+    >>> import asyncio
+    >>> from strata_harvest.crawler import harvest
+    >>> async def demo() -> None:
+    ...     jobs = await harvest("https://boards.greenhouse.io/invalid-board-xyz/jobs")
+    ...     assert isinstance(jobs, list)
+    >>> asyncio.run(demo())  # doctest: +SKIP
     """
     crawler = create_crawler(timeout=timeout)
     result = await crawler.scrape(url)

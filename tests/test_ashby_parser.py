@@ -67,20 +67,26 @@ class TestAshbyParserParse:
         assert result == []
 
     def test_malformed_posting_skipped(self) -> None:
-        content = json.dumps({
-            "data": {
-                "jobBoard": {
-                    "title": "Test",
-                    "jobPostings": [
-                        {"title": "Good", "id": "good-id", "jobUrl": "https://jobs.ashbyhq.com/co/good-id"},
-                        "not a dict",
-                        42,
-                        None,
-                        {"title": None, "id": None},
-                    ],
+        content = json.dumps(
+            {
+                "data": {
+                    "jobBoard": {
+                        "title": "Test",
+                        "jobPostings": [
+                            {
+                                "title": "Good",
+                                "id": "good-id",
+                                "jobUrl": "https://jobs.ashbyhq.com/co/good-id",
+                            },
+                            "not a dict",
+                            42,
+                            None,
+                            {"title": None, "id": None},
+                        ],
+                    }
                 }
             }
-        })
+        )
         result = self.parser.parse(content, url="https://jobs.ashbyhq.com/co")
         assert len(result) == 1
         assert result[0].title == "Good"
@@ -162,21 +168,23 @@ class TestAshbyFieldMapping:
     def test_description_fallback_to_html_stripped(self) -> None:
         """When descriptionPlain is missing, HTML is stripped."""
         parser = AshbyParser()
-        content = json.dumps({
-            "data": {
-                "jobBoard": {
-                    "title": "Test",
-                    "jobPostings": [
-                        {
-                            "id": "html-only",
-                            "title": "HTML Only",
-                            "descriptionHtml": "<div><b>Bold text</b> and normal.</div>",
-                            "jobUrl": "https://jobs.ashbyhq.com/co/html-only",
-                        }
-                    ],
+        content = json.dumps(
+            {
+                "data": {
+                    "jobBoard": {
+                        "title": "Test",
+                        "jobPostings": [
+                            {
+                                "id": "html-only",
+                                "title": "HTML Only",
+                                "descriptionHtml": "<div><b>Bold text</b> and normal.</div>",
+                                "jobUrl": "https://jobs.ashbyhq.com/co/html-only",
+                            }
+                        ],
+                    }
                 }
             }
-        })
+        )
         result = parser.parse(content, url="https://jobs.ashbyhq.com/co")
         assert len(result) == 1
         assert result[0].description == "Bold text and normal."
@@ -247,7 +255,6 @@ class TestAshbyGraphqlQuery:
 
 @pytest.mark.verification
 class TestAshbyFetchAll:
-
     async def test_fetch_job_board(self) -> None:
         content = _load_fixture("ashby_job_board_response.json")
         mock_result = FetchResult(
@@ -314,9 +321,7 @@ class TestAshbyFetchAll:
             await AshbyParser.fetch_all("https://jobs.ashbyhq.com/acmecorp")
 
         call_kwargs = mock_fetch.call_args
-        assert call_kwargs.kwargs.get("method") == "POST" or (
-            len(call_kwargs.args) > 0
-        )
+        assert call_kwargs.kwargs.get("method") == "POST" or (len(call_kwargs.args) > 0)
         assert call_kwargs.kwargs.get("json") is not None
         payload = call_kwargs.kwargs["json"]
         assert "query" in payload

@@ -11,15 +11,17 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from strata_harvest.parsers.ashby import AshbyParser
 from strata_harvest.parsers.greenhouse import GreenhouseParser
 from strata_harvest.parsers.lever import LeverParser
-from strata_harvest.parsers.ashby import AshbyParser
-from strata_harvest.models import JobListing
+
+if TYPE_CHECKING:
+    from strata_harvest.models import JobListing
 
 FIXTURES_ROOT = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
 EXPECTED_ROOT = FIXTURES_ROOT / "expected"

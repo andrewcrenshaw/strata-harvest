@@ -10,7 +10,16 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class ATSProvider(StrEnum):
-    """Known ATS providers."""
+    """Supported ATS vendors recognized by parsers and detection.
+
+    Use enum members when comparing :attr:`JobListing.ats_provider` or
+    :attr:`ATSInfo.provider` values.
+
+    Examples
+    --------
+    >>> ATSProvider.GREENHOUSE.value
+    'greenhouse'
+    """
 
     GREENHOUSE = "greenhouse"
     LEVER = "lever"
@@ -21,7 +30,29 @@ class ATSProvider(StrEnum):
 
 
 class ATSInfo(BaseModel):
-    """Detected ATS provider with confidence score."""
+    """Detected ATS vendor and confidence for a career page.
+
+    Populated by detection helpers (URL patterns and optional DOM probes).
+    Used inside :class:`ScrapeResult` and returned by
+    ``strata_harvest.detector`` functions.
+
+    Attributes
+    ----------
+    provider:
+        Identified ATS, or :attr:`ATSProvider.UNKNOWN` when unsure.
+    confidence:
+        Score in ``[0.0, 1.0]``; higher means stronger evidence.
+    api_url:
+        When applicable, a stable API URL for listings (provider-specific).
+    detection_method:
+        Short label such as ``url_pattern``, ``dom_probe``, or ``none``.
+
+    Examples
+    --------
+    >>> info = ATSInfo(provider=ATSProvider.LEVER, confidence=0.85, detection_method="url_pattern")
+    >>> info.provider == ATSProvider.LEVER
+    True
+    """
 
     provider: ATSProvider = ATSProvider.UNKNOWN
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -30,7 +61,39 @@ class ATSInfo(BaseModel):
 
 
 class JobListing(BaseModel):
-    """A single parsed job listing."""
+    """One job posting extracted from an ATS career page.
+
+    Fields are normalized across providers; optional attributes are ``None``
+    when the source did not expose them. ``raw_data`` holds provider-specific
+    payloads for debugging or extensions.
+
+    Attributes
+    ----------
+    title:
+        Job title as shown on the listing.
+    url:
+        Canonical posting URL (validated ``HttpUrl``).
+    location, department, employment_type:
+        Optional human-readable metadata.
+    description:
+        Long-form description when parsed.
+    requirements:
+        Bullet requirements when the parser extracted them.
+    salary_range:
+        Free-text compensation when available.
+    posted_date:
+        Posting timestamp when parseable.
+    ats_provider:
+        Source ATS when known.
+    raw_data:
+        Arbitrary provider-specific key/values.
+
+    Examples
+    --------
+    >>> j = JobListing(title="Backend Engineer", url="https://jobs.example.com/1")
+    >>> j.title
+    'Backend Engineer'
+    """
 
     title: str
     url: HttpUrl
@@ -62,7 +125,37 @@ class FetchResult(BaseModel):
 
 
 class ScrapeResult(BaseModel):
-    """Result of scraping a single career page."""
+    """Outcome of scraping one career-page URL.
+
+    Always inspect :attr:`error` and :attr:`jobs` together: a successful HTTP
+    response with no matching parser rows can yield an empty ``jobs`` list
+    without setting ``error``.
+
+    Attributes
+    ----------
+    url:
+        The URL that was requested.
+    jobs:
+        Parsed :class:`JobListing` rows (possibly empty).
+    content_hash:
+        Stable hash of raw page bytes when fetched successfully.
+    changed:
+        When a prior hash was supplied to the crawler, whether content differs.
+    ats_info:
+        Detected ATS metadata from :mod:`strata_harvest.detector`.
+    scrape_duration_ms:
+        Wall time spent on the scrape path in milliseconds.
+    error:
+        Human-readable failure when the scrape could not complete; ``None`` on success.
+
+    Examples
+    --------
+    >>> r = ScrapeResult(url="https://example.com/jobs", error="HTTP 404")
+    >>> r.error
+    'HTTP 404'
+    >>> r.ok
+    False
+    """
 
     url: str
     jobs: list[JobListing] = Field(default_factory=list)

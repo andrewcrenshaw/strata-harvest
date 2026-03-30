@@ -143,9 +143,7 @@ class TestNeverRaises:
     async def test_connect_error_returns_fetch_result(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=httpx.ConnectError("connection refused")
-            )
+            instance.request = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -157,9 +155,7 @@ class TestNeverRaises:
     async def test_read_error_returns_fetch_result(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=httpx.ReadError("read error")
-            )
+            instance.request = AsyncMock(side_effect=httpx.ReadError("read error"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -241,9 +237,7 @@ class TestRetryLogic:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=[httpx.TimeoutException("timeout"), ok_resp]
-            )
+            instance.request = AsyncMock(side_effect=[httpx.TimeoutException("timeout"), ok_resp])
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -258,9 +252,7 @@ class TestRetryLogic:
         """Backoff follows 2*(attempt+1) pattern: 2s, 4s."""
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=httpx.TimeoutException("timeout")
-            )
+            instance.request = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -274,9 +266,7 @@ class TestRetryLogic:
     async def test_no_retry_when_retries_zero(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
-                side_effect=httpx.TimeoutException("timeout")
-            )
+            instance.request = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 

@@ -23,28 +23,30 @@ from strata_harvest.models import ATSInfo, ATSProvider, FetchResult, JobListing,
 # Fixtures
 # ---------------------------------------------------------------------------
 
-GREENHOUSE_API_RESPONSE = json.dumps({
-    "jobs": [
-        {
-            "id": 1001,
-            "title": "Software Engineer",
-            "absolute_url": "https://boards.greenhouse.io/acme/jobs/1001",
-            "location": {"name": "San Francisco, CA"},
-            "departments": [{"name": "Engineering"}],
-            "content": "<p>Build things.</p><ul><li>Python</li><li>SQL</li></ul>",
-            "updated_at": "2026-01-15T10:00:00Z",
-        },
-        {
-            "id": 1002,
-            "title": "Product Manager",
-            "absolute_url": "https://boards.greenhouse.io/acme/jobs/1002",
-            "location": {"name": "Remote"},
-            "departments": [{"name": "Product"}],
-            "content": "<p>Ship products.</p>",
-            "updated_at": "2026-02-01T12:00:00Z",
-        },
-    ]
-})
+GREENHOUSE_API_RESPONSE = json.dumps(
+    {
+        "jobs": [
+            {
+                "id": 1001,
+                "title": "Software Engineer",
+                "absolute_url": "https://boards.greenhouse.io/acme/jobs/1001",
+                "location": {"name": "San Francisco, CA"},
+                "departments": [{"name": "Engineering"}],
+                "content": "<p>Build things.</p><ul><li>Python</li><li>SQL</li></ul>",
+                "updated_at": "2026-01-15T10:00:00Z",
+            },
+            {
+                "id": 1002,
+                "title": "Product Manager",
+                "absolute_url": "https://boards.greenhouse.io/acme/jobs/1002",
+                "location": {"name": "Remote"},
+                "departments": [{"name": "Product"}],
+                "content": "<p>Ship products.</p>",
+                "updated_at": "2026-02-01T12:00:00Z",
+            },
+        ]
+    }
+)
 
 
 def _ok_fetch(url: str, content: str = GREENHOUSE_API_RESPONSE) -> FetchResult:
@@ -444,17 +446,18 @@ class TestHarvest:
 @pytest.mark.verification
 class TestExports:
     def test_all_public_api_exported(self) -> None:
-        """AC: All functions exported from strata_harvest.__init__."""
+        """AC: Documented public API lives on strata_harvest root."""
         import strata_harvest
 
         assert hasattr(strata_harvest, "harvest")
         assert hasattr(strata_harvest, "create_crawler")
-        assert hasattr(strata_harvest, "Crawler")
         assert hasattr(strata_harvest, "ScrapeResult")
         assert hasattr(strata_harvest, "JobListing")
-        assert hasattr(strata_harvest, "ATSProvider")
         assert hasattr(strata_harvest, "ATSInfo")
-        assert hasattr(strata_harvest, "FetchResult")
+        assert not hasattr(strata_harvest, "Crawler")
+        assert not hasattr(strata_harvest, "ATSProvider")
+        assert not hasattr(strata_harvest, "FetchResult")
+        assert not hasattr(strata_harvest, "detect_ats")
 
     def test_harvest_callable(self) -> None:
         import strata_harvest

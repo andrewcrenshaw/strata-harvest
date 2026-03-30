@@ -53,12 +53,14 @@ class TestLeverParserParse:
         assert result == []
 
     def test_parse_non_dict_entries_skipped(self) -> None:
-        content = json.dumps([
-            {"text": "Valid", "hostedUrl": "https://jobs.lever.co/co/123"},
-            "not a dict",
-            42,
-            None,
-        ])
+        content = json.dumps(
+            [
+                {"text": "Valid", "hostedUrl": "https://jobs.lever.co/co/123"},
+                "not a dict",
+                42,
+                None,
+            ]
+        )
         result = self.parser.parse(content, url="https://jobs.lever.co/co")
         assert len(result) == 1
         assert result[0].title == "Valid"
@@ -150,12 +152,14 @@ class TestLeverFieldMapping:
     def test_description_fallback_to_html_stripped(self) -> None:
         """When descriptionPlain is missing, HTML description is stripped."""
         parser = LeverParser()
-        content = json.dumps({
-            "id": "html-only",
-            "text": "HTML Only",
-            "description": "<div><b>Bold text</b> and normal.</div>",
-            "hostedUrl": "https://jobs.lever.co/co/html-only",
-        })
+        content = json.dumps(
+            {
+                "id": "html-only",
+                "text": "HTML Only",
+                "description": "<div><b>Bold text</b> and normal.</div>",
+                "hostedUrl": "https://jobs.lever.co/co/html-only",
+            }
+        )
         result = parser.parse(content, url="https://jobs.lever.co/co")
         assert len(result) == 1
         assert result[0].description == "Bold text and normal."
@@ -168,7 +172,6 @@ class TestLeverFieldMapping:
 
 @pytest.mark.verification
 class TestLeverSalaryFormatting:
-
     def test_full_range(self) -> None:
         result = LeverParser._format_salary(
             {"currency": "USD", "interval": "per-year", "min": 100000, "max": 150000}
@@ -194,9 +197,7 @@ class TestLeverSalaryFormatting:
         assert LeverParser._format_salary({}) is None
 
     def test_no_currency_still_formats(self) -> None:
-        result = LeverParser._format_salary(
-            {"min": 50000, "max": 70000, "interval": "per-year"}
-        )
+        result = LeverParser._format_salary({"min": 50000, "max": 70000, "interval": "per-year"})
         assert result == "50,000 - 70,000 per-year"
 
     def test_no_interval(self) -> None:
@@ -211,7 +212,6 @@ class TestLeverSalaryFormatting:
 
 @pytest.mark.verification
 class TestLeverRequirementsExtraction:
-
     def test_extract_from_li_tags(self) -> None:
         lists = [{"text": "Requirements", "content": "<li>Python</li><li>SQL</li>"}]
         result = LeverParser._extract_requirements(lists)
@@ -253,7 +253,6 @@ class TestLeverRequirementsExtraction:
 
 @pytest.mark.verification
 class TestLeverTimestampParsing:
-
     def test_valid_millisecond_timestamp(self) -> None:
         result = LeverParser._parse_timestamp(1711929600000)
         assert result is not None
@@ -279,7 +278,6 @@ class TestLeverTimestampParsing:
 
 @pytest.mark.verification
 class TestLeverBuildApiUrl:
-
     def test_career_page_url(self) -> None:
         url = LeverParser.build_api_url("https://jobs.lever.co/acmecorp")
         assert url == "https://api.lever.co/v0/postings/acmecorp?mode=json"
@@ -293,9 +291,7 @@ class TestLeverBuildApiUrl:
         assert url == "https://api.eu.lever.co/v0/postings/eucompany?mode=json"
 
     def test_already_correct_api_url(self) -> None:
-        url = LeverParser.build_api_url(
-            "https://api.lever.co/v0/postings/acmecorp?mode=json"
-        )
+        url = LeverParser.build_api_url("https://api.lever.co/v0/postings/acmecorp?mode=json")
         assert url == "https://api.lever.co/v0/postings/acmecorp?mode=json"
 
     def test_api_url_without_mode_appends_it(self) -> None:
@@ -303,9 +299,7 @@ class TestLeverBuildApiUrl:
         assert url == "https://api.lever.co/v0/postings/acmecorp?mode=json"
 
     def test_api_url_with_existing_params(self) -> None:
-        url = LeverParser.build_api_url(
-            "https://api.lever.co/v0/postings/acmecorp?limit=10"
-        )
+        url = LeverParser.build_api_url("https://api.lever.co/v0/postings/acmecorp?limit=10")
         assert url == "https://api.lever.co/v0/postings/acmecorp?limit=10&mode=json"
 
 
@@ -316,7 +310,6 @@ class TestLeverBuildApiUrl:
 
 @pytest.mark.verification
 class TestLeverFetchAll:
-
     async def test_single_page_fetch(self) -> None:
         content = _load_fixture("lever_multi_postings.json")
         mock_result = FetchResult(
@@ -351,21 +344,25 @@ class TestLeverFetchAll:
         assert listings == []
 
     async def test_pagination_fetches_multiple_pages(self) -> None:
-        page1 = json.dumps([
-            {
-                "id": f"id-{i}",
-                "text": f"Job {i}",
-                "hostedUrl": f"https://jobs.lever.co/co/{i}",
-            }
-            for i in range(3)
-        ])
-        page2 = json.dumps([
-            {
-                "id": "id-last",
-                "text": "Last Job",
-                "hostedUrl": "https://jobs.lever.co/co/last",
-            }
-        ])
+        page1 = json.dumps(
+            [
+                {
+                    "id": f"id-{i}",
+                    "text": f"Job {i}",
+                    "hostedUrl": f"https://jobs.lever.co/co/{i}",
+                }
+                for i in range(3)
+            ]
+        )
+        page2 = json.dumps(
+            [
+                {
+                    "id": "id-last",
+                    "text": "Last Job",
+                    "hostedUrl": "https://jobs.lever.co/co/last",
+                }
+            ]
+        )
 
         call_count = 0
 
@@ -381,9 +378,7 @@ class TestLeverFetchAll:
             )
 
         with patch("strata_harvest.parsers.lever.safe_fetch", side_effect=mock_fetch):
-            listings = await LeverParser.fetch_all(
-                "https://jobs.lever.co/co", limit=3
-            )
+            listings = await LeverParser.fetch_all("https://jobs.lever.co/co", limit=3)
 
         assert len(listings) == 4
         assert call_count == 2

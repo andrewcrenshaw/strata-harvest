@@ -72,47 +72,53 @@ class TestGreenhouseParserParse:
         assert result == []
 
     def test_non_dict_job_entries_skipped(self) -> None:
-        content = json.dumps({
-            "jobs": [
-                {
-                    "id": 1,
-                    "title": "Valid",
-                    "absolute_url": "https://boards.greenhouse.io/co/jobs/1",
-                },
-                "not a dict",
-                42,
-                None,
-            ],
-            "meta": {"total": 4},
-        })
+        content = json.dumps(
+            {
+                "jobs": [
+                    {
+                        "id": 1,
+                        "title": "Valid",
+                        "absolute_url": "https://boards.greenhouse.io/co/jobs/1",
+                    },
+                    "not a dict",
+                    42,
+                    None,
+                ],
+                "meta": {"total": 4},
+            }
+        )
         result = self.parser.parse(content, url="https://boards.greenhouse.io/co")
         assert len(result) == 1
         assert result[0].title == "Valid"
 
     def test_job_missing_title_skipped(self) -> None:
-        content = json.dumps({
-            "jobs": [
-                {
-                    "id": 1,
-                    "absolute_url": "https://boards.greenhouse.io/co/jobs/1",
-                },
-                {
-                    "id": 2,
-                    "title": "Valid Job",
-                    "absolute_url": "https://boards.greenhouse.io/co/jobs/2",
-                },
-            ],
-            "meta": {"total": 2},
-        })
+        content = json.dumps(
+            {
+                "jobs": [
+                    {
+                        "id": 1,
+                        "absolute_url": "https://boards.greenhouse.io/co/jobs/1",
+                    },
+                    {
+                        "id": 2,
+                        "title": "Valid Job",
+                        "absolute_url": "https://boards.greenhouse.io/co/jobs/2",
+                    },
+                ],
+                "meta": {"total": 2},
+            }
+        )
         result = self.parser.parse(content, url="https://boards.greenhouse.io/co")
         assert len(result) == 1
         assert result[0].title == "Valid Job"
 
     def test_job_missing_url_skipped(self) -> None:
-        content = json.dumps({
-            "jobs": [{"id": 1, "title": "No URL"}],
-            "meta": {"total": 1},
-        })
+        content = json.dumps(
+            {
+                "jobs": [{"id": 1, "title": "No URL"}],
+                "meta": {"total": 1},
+            }
+        )
         result = self.parser.parse(content, url="https://boards.greenhouse.io/co")
         assert result == []
 
@@ -249,23 +255,28 @@ class TestGreenhouseMegacorpEdgeCases:
 
 @pytest.mark.verification
 class TestGreenhouseSalaryFormatting:
-
     def test_full_range_usd(self) -> None:
-        result = GreenhouseParser._format_salary([
-            {"min_cents": 15000000, "max_cents": 20000000, "currency_type": "USD"},
-        ])
+        result = GreenhouseParser._format_salary(
+            [
+                {"min_cents": 15000000, "max_cents": 20000000, "currency_type": "USD"},
+            ]
+        )
         assert result == "USD 150,000 - 200,000"
 
     def test_min_only(self) -> None:
-        result = GreenhouseParser._format_salary([
-            {"min_cents": 10000000, "currency_type": "EUR"},
-        ])
+        result = GreenhouseParser._format_salary(
+            [
+                {"min_cents": 10000000, "currency_type": "EUR"},
+            ]
+        )
         assert result == "EUR 100,000+"
 
     def test_max_only(self) -> None:
-        result = GreenhouseParser._format_salary([
-            {"max_cents": 12000000, "currency_type": "GBP"},
-        ])
+        result = GreenhouseParser._format_salary(
+            [
+                {"max_cents": 12000000, "currency_type": "GBP"},
+            ]
+        )
         assert result == "GBP up to 120,000"
 
     def test_none_input(self) -> None:
@@ -275,9 +286,11 @@ class TestGreenhouseSalaryFormatting:
         assert GreenhouseParser._format_salary([]) is None
 
     def test_no_currency(self) -> None:
-        result = GreenhouseParser._format_salary([
-            {"min_cents": 5000000, "max_cents": 7000000},
-        ])
+        result = GreenhouseParser._format_salary(
+            [
+                {"min_cents": 5000000, "max_cents": 7000000},
+            ]
+        )
         assert result == "50,000 - 70,000"
 
     def test_non_list_input(self) -> None:
@@ -291,18 +304,21 @@ class TestGreenhouseSalaryFormatting:
 
 @pytest.mark.verification
 class TestGreenhouseDepartmentExtraction:
-
     def test_single_department(self) -> None:
-        result = GreenhouseParser._extract_department([
-            {"id": 1, "name": "Engineering", "child_ids": []},
-        ])
+        result = GreenhouseParser._extract_department(
+            [
+                {"id": 1, "name": "Engineering", "child_ids": []},
+            ]
+        )
         assert result == "Engineering"
 
     def test_leaf_preferred_over_parent(self) -> None:
-        result = GreenhouseParser._extract_department([
-            {"id": 1, "name": "Engineering", "child_ids": [2]},
-            {"id": 2, "name": "Backend", "child_ids": []},
-        ])
+        result = GreenhouseParser._extract_department(
+            [
+                {"id": 1, "name": "Engineering", "child_ids": [2]},
+                {"id": 2, "name": "Backend", "child_ids": []},
+            ]
+        )
         assert result == "Backend"
 
     def test_none_input(self) -> None:
@@ -312,10 +328,12 @@ class TestGreenhouseDepartmentExtraction:
         assert GreenhouseParser._extract_department([]) is None
 
     def test_non_dict_entries_skipped(self) -> None:
-        result = GreenhouseParser._extract_department([
-            "garbage",
-            {"id": 1, "name": "Valid", "child_ids": []},
-        ])  # type: ignore[list-item]
+        result = GreenhouseParser._extract_department(
+            [
+                "garbage",
+                {"id": 1, "name": "Valid", "child_ids": []},
+            ]
+        )  # type: ignore[list-item]
         assert result == "Valid"
 
 
@@ -326,7 +344,6 @@ class TestGreenhouseDepartmentExtraction:
 
 @pytest.mark.verification
 class TestGreenhouseBuildApiUrl:
-
     def test_career_page_url(self) -> None:
         url = GreenhouseParser.build_api_url("https://boards.greenhouse.io/acmecorp")
         assert url == "https://boards-api.greenhouse.io/v1/boards/acmecorp/jobs?content=true"
@@ -345,9 +362,7 @@ class TestGreenhouseBuildApiUrl:
         url = GreenhouseParser.build_api_url(
             "https://boards-api.greenhouse.io/v1/boards/acmecorp/jobs?content=true"
         )
-        assert url == (
-            "https://boards-api.greenhouse.io/v1/boards/acmecorp/jobs?content=true"
-        )
+        assert url == ("https://boards-api.greenhouse.io/v1/boards/acmecorp/jobs?content=true")
 
     def test_api_url_without_content_param(self) -> None:
         url = GreenhouseParser.build_api_url(
@@ -363,7 +378,6 @@ class TestGreenhouseBuildApiUrl:
 
 @pytest.mark.verification
 class TestGreenhouseFetchAll:
-
     async def test_successful_fetch(self) -> None:
         content = _load_fixture("acmecorp.json")
         mock_result = FetchResult(
@@ -377,9 +391,7 @@ class TestGreenhouseFetchAll:
             new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = mock_result
-            listings = await GreenhouseParser.fetch_all(
-                "https://boards.greenhouse.io/acmecorp"
-            )
+            listings = await GreenhouseParser.fetch_all("https://boards.greenhouse.io/acmecorp")
 
         assert len(listings) == 3
         mock_fetch.assert_called_once()
@@ -397,9 +409,7 @@ class TestGreenhouseFetchAll:
             new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = error_result
-            listings = await GreenhouseParser.fetch_all(
-                "https://boards.greenhouse.io/nonexistent"
-            )
+            listings = await GreenhouseParser.fetch_all("https://boards.greenhouse.io/nonexistent")
 
         assert listings == []
 
@@ -415,9 +425,7 @@ class TestGreenhouseFetchAll:
             new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = error_result
-            listings = await GreenhouseParser.fetch_all(
-                "https://boards.greenhouse.io/co"
-            )
+            listings = await GreenhouseParser.fetch_all("https://boards.greenhouse.io/co")
 
         assert listings == []
 
@@ -431,9 +439,7 @@ class TestGreenhouseFetchAll:
             new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = error_result
-            listings = await GreenhouseParser.fetch_all(
-                "https://boards.greenhouse.io/co"
-            )
+            listings = await GreenhouseParser.fetch_all("https://boards.greenhouse.io/co")
 
         assert listings == []
 
@@ -448,9 +454,7 @@ class TestGreenhouseFetchAll:
             new_callable=AsyncMock,
         ) as mock_fetch:
             mock_fetch.return_value = mock_result
-            listings = await GreenhouseParser.fetch_all(
-                "https://boards.greenhouse.io/co"
-            )
+            listings = await GreenhouseParser.fetch_all("https://boards.greenhouse.io/co")
 
         assert listings == []
 
@@ -473,9 +477,7 @@ class TestGreenhouseFetchAll:
                 new_callable=AsyncMock,
             ) as mock_fetch:
                 mock_fetch.return_value = mock_result
-                listings = await GreenhouseParser.fetch_all(
-                    "https://boards.greenhouse.io/test"
-                )
+                listings = await GreenhouseParser.fetch_all("https://boards.greenhouse.io/test")
             assert len(listings) == expected_count, (
                 f"Expected {expected_count} from {fixture}, got {len(listings)}"
             )
