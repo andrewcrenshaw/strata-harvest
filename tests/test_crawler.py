@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from strata_harvest.crawler import Crawler, create_crawler, harvest
 from strata_harvest.models import ATSInfo, ATSProvider, FetchResult, JobListing, ScrapeResult
+from strata_harvest.parsers.llm_fallback import LLMFallbackParser
+from tests.robots_helpers import is_robots_txt_url, make_fetch_with_robots, patch_all_safe_fetch
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -80,13 +83,18 @@ class TestCreateCrawler:
         assert isinstance(c, Crawler)
 
     def test_default_rate_limit_is_two_seconds(self) -> None:
-        """AC: Rate limiter default 2.0s."""
+        """AC: Global rate limiter default 0.5/s → 2.0s interval."""
         c = create_crawler()
-        assert c._rate_limiter._interval == 2.0
+        assert c._global_rate_limiter._interval == 2.0
+
+    def test_default_per_domain_rate_is_half_req_per_second(self) -> None:
+        """AC: Per-domain default 0.5 req/s (PCC-1617)."""
+        c = create_crawler()
+        assert c._per_domain_registry._requests_per_second == pytest.approx(0.5)
 
     def test_custom_rate_limit(self) -> None:
         c = create_crawler(rate_limit=0.5)
-        assert c._rate_limiter._interval == pytest.approx(1.0 / 0.5)
+        assert c._global_rate_limiter._interval == pytest.approx(1.0 / 0.5)
 
     def test_custom_timeout(self) -> None:
         c = create_crawler(timeout=60.0)
@@ -122,6 +130,18 @@ class TestCreateCrawler:
     def test_defaults_llm_provider_none(self) -> None:
         c = create_crawler()
         assert c._llm_provider is None
+
+    def test_respect_robots_default_true(self) -> None:
+        c = create_crawler()
+        assert c._respect_robots is True
+
+    def test_respect_robots_false(self) -> None:
+        c = create_crawler(respect_robots=False)
+        assert c._respect_robots is False
+
+    def test_robots_cache_ttl_stored(self) -> None:
+        c = create_crawler(robots_cache_ttl=120.0)
+        assert c._robots_checker.cache_ttl_seconds == 120.0
 
 
 # ---------------------------------------------------------------------------
@@ -211,13 +231,13 @@ class TestCrawlerScrape:
 
     async def test_scrape_fetch_error_returns_error_result(self) -> None:
         url = "https://down.example.com/careers"
+        mock_fetch = make_fetch_with_robots(page=_error_fetch(url))
 
         with (
             patch("strata_harvest.crawler.detect_ats") as mock_detect,
-            patch("strata_harvest.crawler.safe_fetch") as mock_fetch,
+            patch_all_safe_fetch(mock_fetch),
         ):
             mock_detect.return_value = ATSInfo()
-            mock_fetch.return_value = _error_fetch(url)
 
             c = create_crawler()
             result = await c.scrape(url)
@@ -252,9 +272,81 @@ class TestCrawlerScrape:
             mock_fetch.return_value = _ok_fetch(url)
 
             c = create_crawler()
-            with patch.object(c._rate_limiter, "acquire", new_callable=AsyncMock) as mock_acq:
+            with (
+                patch.object(c._global_rate_limiter, "acquire", new_callable=AsyncMock) as mock_g,
+                patch.object(c._per_domain_registry, "acquire", new_callable=AsyncMock) as mock_d,
+            ):
                 await c.scrape(url)
-                mock_acq.assert_called_once()
+                mock_g.assert_called_once()
+                mock_d.assert_called_once_with("boards.greenhouse.io")
+
+
+# ---------------------------------------------------------------------------
+# Per-domain vs global rate limits (PCC-1617)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestCrawlerPerDomainRateLimit:
+    async def test_acquire_rate_limits_parallel_different_hosts_fast(self) -> None:
+        """Sanity: per-domain acquire alone paces different hostnames in parallel."""
+        c = create_crawler(rate_limit=100.0, per_domain_rate=0.5)
+        t0 = time.monotonic()
+        await asyncio.gather(
+            c._acquire_rate_limits("https://a.example.com/jobs"),
+            c._acquire_rate_limits("https://b.example.com/jobs"),
+        )
+        assert time.monotonic() - t0 < 0.5
+
+    async def test_different_domains_respect_independent_per_domain_pacing(self) -> None:
+        """AC1: Two hostnames can progress in parallel when the global cap allows it."""
+        url_a = "https://a.example.com/jobs"
+        url_b = "https://b.example.com/jobs"
+
+        async def fetch_side_effect(u: str, **kwargs: object) -> FetchResult:
+            return _ok_fetch(u)
+
+        with (
+            patch(
+                "strata_harvest.crawler.detect_ats",
+                AsyncMock(return_value=ATSInfo(provider=ATSProvider.GREENHOUSE)),
+            ),
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(side_effect=fetch_side_effect)),
+        ):
+            # Generic hosts are not robots-bypass ATS; skip robots fetch (real TCP ~2s in pytest).
+            c = create_crawler(rate_limit=100.0, per_domain_rate=0.5, respect_robots=False)
+            start = time.monotonic()
+            async for _ in c.scrape_batch([url_a, url_b], concurrency=2):
+                pass
+            elapsed = time.monotonic() - start
+
+        # One global 0.5/s limiter would serialize two requests (~2s apart).
+        assert elapsed < 1.0
+
+    async def test_global_rate_is_upper_bound_across_domains(self) -> None:
+        """AC3: Tight global limit caps throughput even when per-domain is loose."""
+        url_a = "https://a.example.com/jobs"
+        url_b = "https://b.example.com/jobs"
+
+        async def fetch_side_effect(u: str, **kwargs: object) -> FetchResult:
+            return _ok_fetch(u)
+
+        with (
+            patch(
+                "strata_harvest.crawler.detect_ats",
+                AsyncMock(return_value=ATSInfo(provider=ATSProvider.GREENHOUSE)),
+            ),
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(side_effect=fetch_side_effect)),
+        ):
+            c = create_crawler(rate_limit=0.5, per_domain_rate=100.0, respect_robots=False)
+            t0 = time.monotonic()
+            await c.scrape(url_a)
+            t1 = time.monotonic()
+            await c.scrape(url_b)
+            t2 = time.monotonic()
+
+        assert t1 - t0 < 0.5
+        assert t2 - t1 >= 1.9
 
 
 # ---------------------------------------------------------------------------
@@ -271,13 +363,20 @@ class TestCrawlerScrapeBatch:
             "https://jobs.lever.co/beta",
         ]
 
-        with (
-            patch("strata_harvest.crawler.detect_ats") as mock_detect,
-            patch("strata_harvest.crawler.safe_fetch") as mock_fetch,
-        ):
-            mock_detect.return_value = ATSInfo(provider=ATSProvider.GREENHOUSE)
-            mock_fetch.return_value = _ok_fetch(urls[0])
+        async def fetch_side_effect(u: str, **kwargs: object) -> FetchResult:
+            if "lever" in u:
+                return _ok_fetch(u, content="[]")
+            return _ok_fetch(u)
 
+        async def mock_det(u: str, *args: object, **kwargs: object) -> ATSInfo:
+            if "lever" in u:
+                return ATSInfo(provider=ATSProvider.LEVER)
+            return ATSInfo(provider=ATSProvider.GREENHOUSE)
+
+        with (
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(side_effect=mock_det)),
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(side_effect=fetch_side_effect)),
+        ):
             c = create_crawler()
             results = []
             async for result in c.scrape_batch(urls):
@@ -410,13 +509,13 @@ class TestHarvest:
 
     async def test_harvest_empty_on_error(self) -> None:
         url = "https://down.example.com/careers"
+        mock_fetch = make_fetch_with_robots(page=_error_fetch(url))
 
         with (
             patch("strata_harvest.crawler.detect_ats") as mock_detect,
-            patch("strata_harvest.crawler.safe_fetch") as mock_fetch,
+            patch_all_safe_fetch(mock_fetch),
         ):
             mock_detect.return_value = ATSInfo()
-            mock_fetch.return_value = _error_fetch(url)
 
             jobs = await harvest(url)
 
@@ -436,6 +535,142 @@ class TestHarvest:
 
         call_kwargs = mock_fetch.call_args
         assert call_kwargs.kwargs.get("timeout") == 60.0
+
+
+# ---------------------------------------------------------------------------
+# PCC-1605: Double-fetch elimination
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestDoubleFetchElimination:
+    """PCC-1605: Unknown URLs — career page fetched once (robots.txt is separate, PCC-1610)."""
+
+    async def test_unknown_url_single_fetch(self) -> None:
+        """AC1: Career URL is fetched exactly once; robots.txt is a separate request."""
+        url = "https://custom-careers.example.com/jobs"
+        html = "<html><body><h1>Open Positions</h1></body></html>"
+
+        page = FetchResult(
+            url=url,
+            status_code=200,
+            content=html,
+            content_type="text/html",
+            elapsed_ms=50.0,
+        )
+        fetch_mock = make_fetch_with_robots(page=page)
+
+        with patch_all_safe_fetch(fetch_mock):
+            c = create_crawler(llm_provider="test/model")
+            await c.scrape(url)
+
+        page_calls = [c for c in fetch_mock.call_args_list if c[0][0] == url]
+        assert len(page_calls) == 1, "Career page must be fetched exactly once"
+        assert sum(1 for c in fetch_mock.call_args_list if is_robots_txt_url(c[0][0])) == 1
+
+    async def test_known_ats_fetch_unaffected(self) -> None:
+        """AC2: Known ATS providers (Greenhouse) still fetch correctly."""
+        url = "https://boards.greenhouse.io/acme/jobs"
+
+        crawler_fetch = AsyncMock(return_value=_ok_fetch(url))
+        detector_fetch = AsyncMock()
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", crawler_fetch),
+            patch("strata_harvest.detector.safe_fetch", detector_fetch),
+        ):
+            c = create_crawler()
+            result = await c.scrape(url)
+
+        crawler_fetch.assert_called_once()
+        detector_fetch.assert_not_called()
+        assert len(result.jobs) == 2
+
+    async def test_prefetched_html_passed_to_parser(self) -> None:
+        """AC3: Parser (including LLM fallback) receives pre-fetched HTML content."""
+        url = "https://custom-careers.example.com/jobs"
+        html = "<html><body><h1>Open Roles</h1></body></html>"
+
+        fetch_mock = make_fetch_with_robots(
+            page=FetchResult(
+                url=url,
+                status_code=200,
+                content=html,
+                content_type="text/html",
+                elapsed_ms=50.0,
+            ),
+        )
+
+        mock_parser = MagicMock()
+        mock_parser.parse.return_value = []
+
+        with (
+            patch_all_safe_fetch(fetch_mock),
+            patch.object(Crawler, "_get_parser", return_value=mock_parser),
+        ):
+            c = create_crawler(llm_provider="test/model")
+            await c.scrape(url)
+
+        mock_parser.parse.assert_called_once_with(html, url=url)
+
+    async def test_scrape_llm_fallback_uses_parse_async(self) -> None:
+        """PCC-1606: Unknown ATS + llm_provider uses parse_async (non-blocking LLM path)."""
+        url = "https://custom-careers.example.com/jobs"
+        html = "<html><body><h1>Open Roles</h1></body></html>"
+
+        fetch_mock = make_fetch_with_robots(
+            page=FetchResult(
+                url=url,
+                status_code=200,
+                content=html,
+                content_type="text/html",
+                elapsed_ms=50.0,
+            ),
+        )
+
+        with (
+            patch_all_safe_fetch(fetch_mock),
+            patch("strata_harvest.crawler.detect_ats", new_callable=AsyncMock) as mock_detect,
+        ):
+            mock_detect.return_value = ATSInfo(provider=ATSProvider.UNKNOWN, confidence=0.2)
+            c = create_crawler(llm_provider="gemini/gemini-2.0-flash")
+            with patch.object(LLMFallbackParser, "parse_async", new_callable=AsyncMock) as mock_pa:
+                mock_pa.return_value = []
+                await c.scrape(url)
+
+        mock_pa.assert_awaited_once()
+        assert mock_pa.await_args is not None
+        assert mock_pa.await_args.kwargs.get("url") == url
+        assert mock_pa.await_args.args[0] == html
+
+    async def test_detect_ats_receives_prefetched_html(self) -> None:
+        """detect_ats is called with html kwarg to prevent internal fetch."""
+        url = "https://custom-careers.example.com/jobs"
+        html = "<html><body>Content</body></html>"
+
+        mock_fetch = make_fetch_with_robots(
+            page=FetchResult(
+                url=url,
+                status_code=200,
+                content=html,
+                content_type="text/html",
+                elapsed_ms=50.0,
+            ),
+        )
+
+        with (
+            patch("strata_harvest.crawler.detect_ats") as mock_detect,
+            patch_all_safe_fetch(mock_fetch),
+        ):
+            mock_detect.return_value = ATSInfo()
+
+            c = create_crawler(llm_provider="test/model")
+            await c.scrape(url)
+
+        call_kwargs = mock_detect.call_args
+        assert call_kwargs.kwargs.get("html") == html, (
+            "detect_ats must receive pre-fetched HTML to avoid redundant fetch"
+        )
 
 
 # ---------------------------------------------------------------------------

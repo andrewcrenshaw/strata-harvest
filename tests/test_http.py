@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import socket
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from strata_harvest.models import FetchResult
 from strata_harvest.utils.http import (
+    DEFAULT_MAX_RESPONSE_BYTES,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT_S,
     DEFAULT_USER_AGENT,
@@ -41,6 +43,14 @@ def _mock_response(
     )
 
 
+def _stream_cm(mock_resp: httpx.Response) -> MagicMock:
+    """Async context manager yielded by ``AsyncClient.stream()``."""
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=mock_resp)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    return cm
+
+
 # ---------------------------------------------------------------------------
 # Constants / defaults
 # ---------------------------------------------------------------------------
@@ -57,6 +67,9 @@ class TestDefaults:
     def test_default_user_agent(self) -> None:
         assert DEFAULT_USER_AGENT == "strata-harvest/0.1"
 
+    def test_default_max_response_bytes(self) -> None:
+        assert DEFAULT_MAX_RESPONSE_BYTES == 10 * 1024 * 1024
+
 
 # ---------------------------------------------------------------------------
 # Successful fetch
@@ -72,7 +85,7 @@ class TestSuccessfulFetch:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -91,7 +104,7 @@ class TestSuccessfulFetch:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -108,7 +121,7 @@ class TestSuccessfulFetch:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -116,6 +129,57 @@ class TestSuccessfulFetch:
 
         assert result.data is not None
         assert len(result.data["raw_text"]) == 500
+
+
+@pytest.mark.verification
+class TestResponseSizeLimit:
+    async def test_rejects_body_exceeding_max(self) -> None:
+        """Oversized streamed body returns FetchResult(ok=False) with sizes in error."""
+
+        class ChunkedResp:
+            status_code = 200
+            headers = httpx.Headers({"content-type": "text/plain"})
+            request = httpx.Request("GET", "https://example.com/huge")
+
+            async def aiter_bytes(self):
+                yield b"x" * 50
+                yield b"y" * 60  # total 110 > limit 100
+
+        mock_resp = ChunkedResp()
+
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))  # type: ignore[arg-type]
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch(
+                "https://example.com/huge",
+                max_response_bytes=100,
+                retries=0,
+            )
+
+        assert result.ok is False
+        assert result.error is not None
+        assert "max_response_bytes" in result.error
+        assert "110" in result.error
+        assert "100" in result.error
+
+    async def test_small_body_respects_max_param(self) -> None:
+        """Responses under the limit behave as before when max_response_bytes is set."""
+        html = "<html><body>ok</body></html>"
+        mock_resp = _mock_response(text=html)
+
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("https://example.com", max_response_bytes=10_000)
+
+        assert result.ok is True
+        assert result.data == {"raw_text": html}
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +193,7 @@ class TestNeverRaises:
         """Timeout returns FetchResult(ok=False), never raises."""
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.TimeoutException("timed out"))
+            instance.stream = MagicMock(side_effect=httpx.TimeoutException("timed out"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -143,7 +207,7 @@ class TestNeverRaises:
     async def test_connect_error_returns_fetch_result(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+            instance.stream = MagicMock(side_effect=httpx.ConnectError("connection refused"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -155,7 +219,7 @@ class TestNeverRaises:
     async def test_read_error_returns_fetch_result(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.ReadError("read error"))
+            instance.stream = MagicMock(side_effect=httpx.ReadError("read error"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -178,7 +242,7 @@ class TestHTTPErrorRetry:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -195,7 +259,7 @@ class TestHTTPErrorRetry:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -212,7 +276,7 @@ class TestHTTPErrorRetry:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=[error_resp, ok_resp])
+            instance.stream = MagicMock(side_effect=[_stream_cm(error_resp), _stream_cm(ok_resp)])
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -237,7 +301,9 @@ class TestRetryLogic:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=[httpx.TimeoutException("timeout"), ok_resp])
+            instance.stream = MagicMock(
+                side_effect=[httpx.TimeoutException("timeout"), _stream_cm(ok_resp)]
+            )
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -246,13 +312,13 @@ class TestRetryLogic:
 
         assert result.ok is True
         assert result.data == json_payload
-        assert instance.request.call_count == 2
+        assert instance.stream.call_count == 2
 
     async def test_exponential_backoff_timing(self) -> None:
         """Backoff follows 2*(attempt+1) pattern: 2s, 4s."""
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+            instance.stream = MagicMock(side_effect=httpx.TimeoutException("timeout"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -266,14 +332,14 @@ class TestRetryLogic:
     async def test_no_retry_when_retries_zero(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+            instance.stream = MagicMock(side_effect=httpx.TimeoutException("timeout"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
             result = await safe_fetch("https://slow.example.com", retries=0)
 
         assert result.ok is False
-        assert instance.request.call_count == 1
+        assert instance.stream.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -289,12 +355,12 @@ class TestSharedClient:
         mock_resp = _mock_response(json_data=json_payload)
 
         shared_client = AsyncMock(spec=httpx.AsyncClient)
-        shared_client.request = AsyncMock(return_value=mock_resp)
+        shared_client.stream = MagicMock(return_value=_stream_cm(mock_resp))
 
         result = await safe_fetch("https://api.example.com", client=shared_client)
 
         assert result.ok is True
-        shared_client.request.assert_called_once()
+        shared_client.stream.assert_called_once()
         shared_client.aclose.assert_not_called()
 
     async def test_closes_owned_client(self) -> None:
@@ -303,7 +369,7 @@ class TestSharedClient:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -325,7 +391,7 @@ class TestPostSupport:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -336,7 +402,7 @@ class TestPostSupport:
             )
 
         assert result.ok is True
-        call_kwargs = instance.request.call_args
+        call_kwargs = instance.stream.call_args
         assert call_kwargs.args[0] == "POST"
         assert call_kwargs.kwargs.get("json") == {"query": "engineer"}
 
@@ -346,7 +412,7 @@ class TestPostSupport:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -357,7 +423,7 @@ class TestPostSupport:
             )
 
         assert result.ok is True
-        call_kwargs = instance.request.call_args
+        call_kwargs = instance.stream.call_args
         assert call_kwargs.kwargs.get("content") == b"raw payload"
 
 
@@ -374,7 +440,7 @@ class TestConfigurableHeaders:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -383,7 +449,7 @@ class TestConfigurableHeaders:
                 headers={"Authorization": "Bearer token123"},
             )
 
-        call_kwargs = instance.request.call_args
+        call_kwargs = instance.stream.call_args
         sent_headers = call_kwargs.kwargs.get("headers", {})
         assert sent_headers["Authorization"] == "Bearer token123"
         assert sent_headers["User-Agent"] == DEFAULT_USER_AGENT
@@ -394,7 +460,7 @@ class TestConfigurableHeaders:
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(return_value=mock_resp)
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -403,9 +469,148 @@ class TestConfigurableHeaders:
                 headers={"User-Agent": "custom-bot/1.0"},
             )
 
-        call_kwargs = instance.request.call_args
+        call_kwargs = instance.stream.call_args
         sent_headers = call_kwargs.kwargs.get("headers", {})
         assert sent_headers["User-Agent"] == "custom-bot/1.0"
+
+
+# ---------------------------------------------------------------------------
+# SSRF — private / link-local / loopback blocked by default
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestSsrfBlocking:
+    async def test_blocks_rfc1918_literal_by_default(self) -> None:
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://192.168.0.1/path", retries=0)
+
+        assert result.ok is False
+        assert result.error is not None
+        assert "SSRF" in result.error
+        assert "192.168.0.1" in result.error
+        instance.stream.assert_not_called()
+
+    async def test_blocks_10_network_literal(self) -> None:
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://10.0.0.1/", retries=0)
+
+        assert result.ok is False
+        assert "SSRF" in (result.error or "")
+        instance.stream.assert_not_called()
+
+    async def test_blocks_172_16_network_literal(self) -> None:
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://172.16.0.5/", retries=0)
+
+        assert result.ok is False
+        assert "SSRF" in (result.error or "")
+        instance.stream.assert_not_called()
+
+    async def test_blocks_loopback_ipv4(self) -> None:
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://127.0.0.1:8080/", retries=0)
+
+        assert result.ok is False
+        assert "SSRF" in (result.error or "")
+        assert "127.0.0.1" in (result.error or "")
+        instance.stream.assert_not_called()
+
+    async def test_blocks_loopback_ipv6(self) -> None:
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://[::1]/", retries=0)
+
+        assert result.ok is False
+        assert "SSRF" in (result.error or "")
+        instance.stream.assert_not_called()
+
+    async def test_blocks_link_local_169_254(self) -> None:
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://169.254.169.254/latest/meta-data", retries=0)
+
+        assert result.ok is False
+        assert "SSRF" in (result.error or "")
+        instance.stream.assert_not_called()
+
+    async def test_blocks_localhost_hostname(self) -> None:
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://LocalHost/foo", retries=0)
+
+        assert result.ok is False
+        assert "SSRF" in (result.error or "")
+        assert "localhost" in (result.error or "").lower()
+        instance.stream.assert_not_called()
+
+    async def test_allow_private_overrides_literal(self) -> None:
+        mock_resp = _mock_response(json_data={"ok": True})
+
+        with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
+            instance = AsyncMock()
+            instance.stream = MagicMock(return_value=_stream_cm(mock_resp))
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("http://192.168.1.1/", allow_private=True, retries=0)
+
+        assert result.ok is True
+        instance.stream.assert_called_once()
+
+    async def test_hostname_resolving_to_private_ip_blocked(self) -> None:
+        with (
+            patch(
+                "socket.getaddrinfo",
+                return_value=[
+                    (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.99", 443)),
+                ],
+            ),
+            patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client,
+        ):
+            instance = AsyncMock()
+            instance.stream = MagicMock()
+            instance.aclose = AsyncMock()
+            mock_client.return_value = instance
+
+            result = await safe_fetch("https://corp-internal.example/", retries=0)
+
+        assert result.ok is False
+        assert "SSRF" in (result.error or "")
+        assert "10.0.0.99" in (result.error or "")
+        instance.stream.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

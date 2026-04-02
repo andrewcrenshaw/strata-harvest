@@ -24,6 +24,8 @@ from strata_harvest.parsers.greenhouse import GreenhouseParser
 from strata_harvest.parsers.lever import LeverParser
 from strata_harvest.parsers.llm_fallback import LLMFallbackParser
 from strata_harvest.utils.http import safe_fetch
+from tests.robots_helpers import make_fetch_with_robots, patch_all_safe_fetch
+from tests.test_http import _stream_cm
 
 # ---------------------------------------------------------------------------
 # Edge case: Empty career page
@@ -43,12 +45,12 @@ class TestEmptyCareerPage:
             content_type="text/html",
             elapsed_ms=50.0,
         )
+        mock_fetch = make_fetch_with_robots(page=fetch_result)
         with (
             patch("strata_harvest.crawler.detect_ats") as mock_detect,
-            patch("strata_harvest.crawler.safe_fetch") as mock_fetch,
+            patch_all_safe_fetch(mock_fetch),
         ):
             mock_detect.return_value = ATSInfo()
-            mock_fetch.return_value = fetch_result
             crawler = create_crawler()
             result = await crawler.scrape("https://example.com/careers")
 
@@ -65,12 +67,12 @@ class TestEmptyCareerPage:
             content_type="text/html",
             elapsed_ms=10.0,
         )
+        mock_fetch = make_fetch_with_robots(page=fetch_result)
         with (
             patch("strata_harvest.crawler.detect_ats") as mock_detect,
-            patch("strata_harvest.crawler.safe_fetch") as mock_fetch,
+            patch_all_safe_fetch(mock_fetch),
         ):
             mock_detect.return_value = ATSInfo()
-            mock_fetch.return_value = fetch_result
             crawler = create_crawler()
             result = await crawler.scrape("https://example.com/careers")
 
@@ -163,7 +165,7 @@ class TestATSAPIDown:
     async def test_safe_fetch_connection_refused(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+            instance.stream = MagicMock(side_effect=httpx.ConnectError("Connection refused"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -262,7 +264,7 @@ class TestTimeoutOnSlowPage:
     async def test_safe_fetch_timeout(self) -> None:
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.TimeoutException("Read timed out"))
+            instance.stream = MagicMock(side_effect=httpx.TimeoutException("Read timed out"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -280,12 +282,12 @@ class TestTimeoutOnSlowPage:
             error="TimeoutException: Read timed out",
             elapsed_ms=30000.0,
         )
+        mock_fetch = make_fetch_with_robots(page=timeout_result)
         with (
             patch("strata_harvest.crawler.detect_ats") as mock_detect,
-            patch("strata_harvest.crawler.safe_fetch") as mock_fetch,
+            patch_all_safe_fetch(mock_fetch),
         ):
             mock_detect.return_value = ATSInfo()
-            mock_fetch.return_value = timeout_result
             crawler = create_crawler(timeout=1.0)
             result = await crawler.scrape(url)
 
@@ -297,7 +299,7 @@ class TestTimeoutOnSlowPage:
         """Timeout with retries exhausted still returns structured error."""
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(side_effect=httpx.TimeoutException("Read timed out"))
+            instance.stream = MagicMock(side_effect=httpx.TimeoutException("Read timed out"))
             instance.aclose = AsyncMock()
             mock_client.return_value = instance
 
@@ -305,7 +307,7 @@ class TestTimeoutOnSlowPage:
                 result = await safe_fetch("https://slow.example.com", retries=2)
 
         assert result.ok is False
-        assert instance.request.call_count == 3
+        assert instance.stream.call_count == 3
 
     async def test_safe_fetch_timeout_then_success(self) -> None:
         """First attempt times out, retry succeeds."""
@@ -317,10 +319,10 @@ class TestTimeoutOnSlowPage:
         )
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()
-            instance.request = AsyncMock(
+            instance.stream = MagicMock(
                 side_effect=[
                     httpx.TimeoutException("Read timed out"),
-                    ok_response,
+                    _stream_cm(ok_response),
                 ]
             )
             instance.aclose = AsyncMock()
@@ -330,7 +332,7 @@ class TestTimeoutOnSlowPage:
                 result = await safe_fetch("https://slow.example.com", retries=1)
 
         assert result.ok is True
-        assert instance.request.call_count == 2
+        assert instance.stream.call_count == 2
 
 
 # ---------------------------------------------------------------------------

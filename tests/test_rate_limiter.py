@@ -5,7 +5,32 @@ import time
 
 import pytest
 
-from strata_harvest.utils.rate_limiter import RateLimiter
+from strata_harvest.utils.rate_limiter import PerDomainRateLimiterRegistry, RateLimiter
+
+
+@pytest.mark.verification
+class TestPerDomainRateLimiterRegistry:
+    async def test_independent_hosts(self) -> None:
+        reg = PerDomainRateLimiterRegistry(requests_per_second=100.0)
+        t0 = time.monotonic()
+        await asyncio.gather(reg.acquire("a.example.com"), reg.acquire("b.example.com"))
+        elapsed = time.monotonic() - t0
+        assert elapsed < 0.1
+
+    async def test_same_host_serializes(self) -> None:
+        reg = PerDomainRateLimiterRegistry(requests_per_second=10.0)
+        await reg.acquire("a.example.com")
+        start = time.monotonic()
+        await reg.acquire("a.example.com")
+        assert time.monotonic() - start >= 0.05
+
+    async def test_evicts_idle_hosts(self) -> None:
+        reg = PerDomainRateLimiterRegistry(requests_per_second=100.0, idle_ttl_seconds=0.05)
+        await reg.acquire("stale.example.com")
+        assert "stale.example.com" in reg._by_host
+        await asyncio.sleep(0.08)
+        await reg.acquire("other.example.com")
+        assert "stale.example.com" not in reg._by_host
 
 
 @pytest.mark.verification

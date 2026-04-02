@@ -9,19 +9,32 @@ Provides:
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
-from strata_harvest.detector import detect_ats
+from strata_harvest.detector import detect_ats, detect_from_url
 from strata_harvest.models import ATSProvider, JobListing, ScrapeResult
 from strata_harvest.parsers.base import BaseParser
+from strata_harvest.parsers.llm_fallback import LLMFallbackParser
 from strata_harvest.utils.hashing import content_hash
 from strata_harvest.utils.http import safe_fetch
-from strata_harvest.utils.rate_limiter import RateLimiter
+from strata_harvest.utils.rate_limiter import PerDomainRateLimiterRegistry, RateLimiter
+from strata_harvest.utils.robots import RobotsTxtChecker
+
+logger = logging.getLogger(__name__)
+
+# API-oriented ATS boards: parsers call vendor APIs; skip robots.txt on the career URL fetch.
+_ROBOTS_BYPASS_PROVIDERS: frozenset[ATSProvider] = frozenset(
+    (ATSProvider.GREENHOUSE, ATSProvider.LEVER, ATSProvider.ASHBY),
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-_DEFAULT_RATE_LIMIT: float = 0.5  # requests per second → 2.0s between requests
+_DEFAULT_RATE_LIMIT: float = 0.5  # global max requests per second (upper bound)
+_DEFAULT_PER_DOMAIN_RATE: float = 0.5  # requests per second per hostname
+_DEFAULT_PER_DOMAIN_IDLE_TTL: float = 3600.0  # drop idle per-domain limiters after 1h
 _DEFAULT_TIMEOUT: float = 30.0
 _DEFAULT_CONCURRENCY: int = 5
 
@@ -35,7 +48,13 @@ class Crawler:
     Parameters
     ----------
     rate_limit:
-        Maximum requests per second (default ``0.5`` → one request every 2 s).
+        Global maximum requests per second across all domains (default ``0.5``).
+        Acts as an upper bound in addition to per-domain pacing.
+    per_domain_rate:
+        Maximum requests per second **per hostname** (default ``0.5``).
+    per_domain_idle_ttl:
+        Seconds after the last completed request to a hostname before its
+        per-domain limiter entry may be evicted (default one hour).
     timeout:
         Per-request HTTP timeout in seconds.
     user_agent:
@@ -47,24 +66,54 @@ class Crawler:
     llm_provider:
         LiteLLM model id for the LLM fallback parser when ATS is unknown
         (e.g. ``openai/gpt-4o-mini``). Requires the ``llm`` extra.
+    allow_private:
+        When False (default), refuse URLs that resolve to private, loopback, or
+        link-local addresses (SSRF mitigation). Set True only for tests or
+        trusted environments.
+    respect_robots:
+        When True (default), load ``robots.txt`` before the career-page GET for
+        non-API ATS paths. Greenhouse, Lever, and Ashby (URL-detected) skip this check.
+    robots_cache_ttl:
+        Seconds to cache parsed ``robots.txt`` per origin (default one hour).
     """
 
     def __init__(
         self,
         *,
         rate_limit: float = _DEFAULT_RATE_LIMIT,
+        per_domain_rate: float = _DEFAULT_PER_DOMAIN_RATE,
+        per_domain_idle_ttl: float = _DEFAULT_PER_DOMAIN_IDLE_TTL,
         timeout: float = _DEFAULT_TIMEOUT,
         user_agent: str | None = None,
         headless: bool = False,
         proxy: str | None = None,
         llm_provider: str | None = None,
+        allow_private: bool = False,
+        respect_robots: bool = True,
+        robots_cache_ttl: float = 3600.0,
     ) -> None:
-        self._rate_limiter = RateLimiter(requests_per_second=rate_limit)
+        self._global_rate_limiter = RateLimiter(requests_per_second=rate_limit)
+        self._per_domain_registry = PerDomainRateLimiterRegistry(
+            requests_per_second=per_domain_rate,
+            idle_ttl_seconds=per_domain_idle_ttl,
+        )
         self._timeout = timeout
         self._user_agent = user_agent
         self._headless = headless
         self._proxy = proxy
         self._llm_provider = llm_provider
+        self._allow_private = allow_private
+        self._respect_robots = respect_robots
+        self._robots_checker = RobotsTxtChecker(
+            ttl_seconds=robots_cache_ttl,
+            user_agent=user_agent,
+        )
+
+    async def _acquire_rate_limits(self, url: str) -> None:
+        """Apply global and per-hostname rate limits (global is the upper bound)."""
+        await self._global_rate_limiter.acquire()
+        hostname = urlparse(url).hostname or ""
+        await self._per_domain_registry.acquire(hostname)
 
     async def scrape(self, url: str, *, previous_hash: str | None = None) -> ScrapeResult:
         """Scrape a career page and return structured results.
@@ -101,13 +150,57 @@ class Crawler:
         ...     assert r.url.endswith("/jobs")
         >>> asyncio.run(main())  # doctest: +SKIP
         """
-        await self._rate_limiter.acquire()
+        await self._acquire_rate_limits(url)
 
-        ats_info = await detect_ats(url, timeout=self._timeout, user_agent=self._user_agent)
-        parser = self._get_parser(ats_info.provider)
+        url_hint = detect_from_url(url)
+        bypass_robots = url_hint.provider in _ROBOTS_BYPASS_PROVIDERS
+
+        if self._respect_robots and not bypass_robots:
+            allowed = await self._robots_checker.can_fetch(
+                url,
+                timeout=self._timeout,
+                allow_private=self._allow_private,
+            )
+            if not allowed:
+                logger.info(
+                    "Skipping %s: robots.txt disallows this URL for User-Agent %r",
+                    url,
+                    self._robots_checker.user_agent,
+                )
+                return ScrapeResult(
+                    url=url,
+                    ats_info=url_hint,
+                    error="robots.txt disallows fetching this URL for the configured user agent",
+                )
 
         fetch_headers = {"User-Agent": self._user_agent} if self._user_agent else None
-        result = await safe_fetch(url, timeout=self._timeout, headers=fetch_headers)
+        result = await safe_fetch(
+            url,
+            timeout=self._timeout,
+            headers=fetch_headers,
+            allow_private=self._allow_private,
+        )
+
+        ats_info = await detect_ats(
+            url,
+            html=result.content or "",
+            timeout=self._timeout,
+            user_agent=self._user_agent,
+            allow_private=self._allow_private,
+        )
+
+        if BaseParser.is_stub_provider(ats_info.provider) and not self._llm_provider:
+            provider_name = ats_info.provider.value.title()
+            return ScrapeResult(
+                url=url,
+                ats_info=ats_info,
+                error=(
+                    f"{provider_name} parser is not yet implemented. "
+                    f"Configure llm_provider to use LLM extraction: "
+                    f"create_crawler(llm_provider='gemini/gemini-2.0-flash')"
+                ),
+            )
+
         if not result.ok:
             return ScrapeResult(
                 url=url,
@@ -116,9 +209,15 @@ class Crawler:
                 scrape_duration_ms=result.elapsed_ms,
             )
 
+        parser = self._get_parser(ats_info.provider)
         page_hash = content_hash(result.content or "")
         changed = previous_hash is None or page_hash != previous_hash
-        jobs = parser.parse(result.content or "", url=url)
+        # LLM extraction is synchronous in litellm; run it in a thread so the
+        # asyncio event loop stays responsive under concurrent scrapes (PCC-1606).
+        if isinstance(parser, LLMFallbackParser):
+            jobs = await parser.parse_async(result.content or "", url=url)
+        else:
+            jobs = parser.parse(result.content or "", url=url)
 
         return ScrapeResult(
             url=url,
@@ -138,8 +237,8 @@ class Crawler:
 
         Uses an :class:`asyncio.Semaphore` to cap parallelism at
         *concurrency*. Each URL is scraped via :meth:`scrape`, which applies
-        the crawler's rate limiter; the semaphore bounds concurrent tasks while
-        the limiter paces HTTP requests.
+        a global rate cap plus an independent per-hostname limiter; the
+        semaphore bounds concurrent tasks while the limiters pace HTTP requests.
 
         Parameters
         ----------
@@ -182,29 +281,39 @@ class Crawler:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     def _get_parser(self, provider: ATSProvider) -> BaseParser:
-        """Return the appropriate parser, wiring llm_provider if needed."""
-        if provider == ATSProvider.UNKNOWN and self._llm_provider:
-            from strata_harvest.parsers.llm_fallback import LLMFallbackParser
+        """Return the appropriate parser, wiring llm_provider if needed.
 
-            return LLMFallbackParser(llm_provider=self._llm_provider)
-        return BaseParser.for_provider(provider)
+        Stub parsers fall through to LLM extraction automatically via
+        ``BaseParser.for_provider()``.
+        """
+        return BaseParser.for_provider(provider, llm_provider=self._llm_provider)
 
 
 def create_crawler(
     *,
     rate_limit: float = _DEFAULT_RATE_LIMIT,
+    per_domain_rate: float = _DEFAULT_PER_DOMAIN_RATE,
+    per_domain_idle_ttl: float = _DEFAULT_PER_DOMAIN_IDLE_TTL,
     timeout: float = _DEFAULT_TIMEOUT,
     user_agent: str | None = None,
     headless: bool = False,
     proxy: str | None = None,
     llm_provider: str | None = None,
+    allow_private: bool = False,
+    respect_robots: bool = True,
+    robots_cache_ttl: float = 3600.0,
 ) -> Crawler:
     """Build a :class:`Crawler` with explicit tuning knobs.
 
     Parameters
     ----------
     rate_limit:
-        Max requests per second (default ``0.5`` → one request every 2 s).
+        Global max requests per second across all domains (upper bound).
+    per_domain_rate:
+        Max requests per second per hostname (default ``0.5``).
+    per_domain_idle_ttl:
+        Evict idle per-domain limiters after this many seconds without a
+        completed request to that host.
     timeout:
         Per-request HTTP timeout in seconds.
     user_agent:
@@ -216,6 +325,12 @@ def create_crawler(
     llm_provider:
         LiteLLM model string for the LLM fallback parser when the ATS cannot
         be identified (e.g. ``openai/gpt-4o-mini``). Install ``strata-harvest[llm]``.
+    allow_private:
+        When True, allow fetches to private/loopback/link-local hosts (testing only).
+    respect_robots:
+        When True (default), honor ``robots.txt`` before scraping non-API career URLs.
+    robots_cache_ttl:
+        Cache duration for parsed ``robots.txt`` per site (seconds).
 
     Returns
     -------
@@ -231,15 +346,25 @@ def create_crawler(
     """
     return Crawler(
         rate_limit=rate_limit,
+        per_domain_rate=per_domain_rate,
+        per_domain_idle_ttl=per_domain_idle_ttl,
         timeout=timeout,
         user_agent=user_agent,
         headless=headless,
         proxy=proxy,
         llm_provider=llm_provider,
+        allow_private=allow_private,
+        respect_robots=respect_robots,
+        robots_cache_ttl=robots_cache_ttl,
     )
 
 
-async def harvest(url: str, *, timeout: float = _DEFAULT_TIMEOUT) -> list[JobListing]:
+async def harvest(
+    url: str,
+    *,
+    timeout: float = _DEFAULT_TIMEOUT,
+    allow_private: bool = False,
+) -> list[JobListing]:
     """Scrape a career page once and return only the parsed job rows.
 
     Builds a default :class:`Crawler`, runs :meth:`Crawler.scrape`, and returns
@@ -252,6 +377,8 @@ async def harvest(url: str, *, timeout: float = _DEFAULT_TIMEOUT) -> list[JobLis
         Career page or job-board URL.
     timeout:
         Per-request HTTP timeout in seconds passed to the internal crawler.
+    allow_private:
+        Passed to :func:`create_crawler` (see :class:`Crawler`).
 
     Returns
     -------
@@ -276,6 +403,6 @@ async def harvest(url: str, *, timeout: float = _DEFAULT_TIMEOUT) -> list[JobLis
     ...     assert isinstance(jobs, list)
     >>> asyncio.run(demo())  # doctest: +SKIP
     """
-    crawler = create_crawler(timeout=timeout)
+    crawler = create_crawler(timeout=timeout, allow_private=allow_private)
     result = await crawler.scrape(url)
     return result.jobs

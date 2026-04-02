@@ -1,5 +1,6 @@
 # strata-harvest
 
+[![CI](https://github.com/andrewcrenshaw/strata-harvest/actions/workflows/ci.yml/badge.svg)](https://github.com/andrewcrenshaw/strata-harvest/actions/workflows/ci.yml)
 [![Status: Pre-Alpha](https://img.shields.io/badge/status-pre--alpha%20(0.x)-orange.svg)](https://semver.org/spec/v2.0.0.html)
 [![PyPI version](https://img.shields.io/pypi/v/strata-harvest.svg)](https://pypi.org/project/strata-harvest/)
 [![Python versions](https://img.shields.io/pypi/pyversions/strata-harvest.svg)](https://pypi.org/project/strata-harvest/)
@@ -20,14 +21,6 @@ Job data is fragmented across dozens of ATS platforms, each with its own page st
 3. **Fall back** — For unknown providers, use an optional LLM-based extractor that reads the page and returns structured listings anyway
 
 The result is a single `harvest(url)` call that returns clean, typed job data from any career page.
-
-## Use Cases
-
-- **Job search automation** — Scrape target company career pages on a schedule, detect new postings, feed them into a matching pipeline
-- **Recruiting intelligence** — Monitor competitor hiring patterns, track which roles are open/closed over time, identify market signals
-- **Job board aggregation** — Build a focused job board for a niche (e.g., climate tech, AI/ML) by harvesting from curated company lists
-- **HR analytics** — Track time-to-fill by monitoring when listings appear and disappear, analyze job requirement trends across an industry
-- **Salary benchmarking** — Collect job descriptions at scale for compensation analysis and market positioning
 
 ## Quick Start
 
@@ -64,6 +57,17 @@ pip install strata-harvest[llm]
 ```
 
 Requires **Python 3.11+**.
+
+## Features
+
+- **ATS auto-detection** — URL pattern matching and DOM probing identify the ATS provider with a confidence score, so you never need to specify it manually
+- **Structured parsers** — Dedicated parsers for Greenhouse (REST), Lever (JSON), and Ashby (GraphQL) that extract typed `JobListing` objects with normalized fields
+- **LLM fallback** — When no known ATS is detected, an optional LLM-based extractor reads the page and returns structured listings anyway (supports Gemini, OpenAI, Ollama, and any provider via [LiteLLM](https://docs.litellm.ai/))
+- **Change detection** — Content hashing lets you compare scrape results over time; pass a `previous_hash` to `crawler.scrape()` and check `result.changed`
+- **Rate limiting** — Built-in token-bucket rate limiter prevents overwhelming career page servers
+- **Batch scraping** — `crawler.scrape_batch()` runs multiple URLs concurrently with configurable parallelism
+- **Resilient HTTP** — `safe_fetch()` never raises; transport errors surface as structured results with retry logic
+- **Typed models** — Pydantic v2 models (`JobListing`, `ScrapeResult`, `ATSInfo`) with full type safety
 
 ## How It Works
 
@@ -111,7 +115,7 @@ Each supported ATS has a dedicated parser that knows how to call its API and nor
 When the detector can't identify the ATS, the optional LLM fallback reads the page content and extracts job listings using structured prompts. This handles the long tail of custom career pages and lesser-known ATS platforms.
 
 ```python
-crawler = create_crawler(llm_provider="gemini-flash")
+crawler = create_crawler(llm_provider="gemini/gemini-2.0-flash")
 result = await crawler.scrape("https://custom-careers-page.com/jobs")
 ```
 
@@ -122,10 +126,24 @@ All parsed data uses typed Pydantic models:
 ```python
 from strata_harvest.models import JobListing, ScrapeResult, ATSInfo
 
-# JobListing: title, company, location, url, description, requirements, salary_range, ...
-# ScrapeResult: jobs, ats_info, error, timing, content_hash
+# JobListing: title, url, location, department, description, requirements, salary_range, ...
+# ScrapeResult: jobs, ats_info, error, scrape_duration_ms, content_hash, changed
 # ATSInfo: provider, confidence, detection_method
 ```
+
+## Use Cases
+
+- **Job search automation** — Scrape target company career pages on a schedule, detect new postings, feed them into a matching pipeline
+- **Recruiting intelligence** — Monitor competitor hiring patterns, track which roles are open/closed over time, identify market signals
+- **Job board aggregation** — Build a focused job board for a niche (e.g., climate tech, AI/ML) by harvesting from curated company lists
+- **HR analytics** — Track time-to-fill by monitoring when listings appear and disappear, analyze job requirement trends across an industry
+- **Salary benchmarking** — Collect job descriptions at scale for compensation analysis and market positioning
+
+## Guides
+
+- **[Adding a New ATS Parser](docs/adding-a-parser.md)** — Step-by-step guide for contributors
+- **[LLM Configuration](docs/llm-configuration.md)** — How to configure Gemini, OpenAI, Ollama, or any LiteLLM provider for fallback extraction
+- **[Advanced Usage](docs/advanced-usage.md)** — Custom crawlers, rate limiting, batch scraping, change detection, and proxy setup
 
 ## Part of the Strata Ecosystem
 
@@ -156,7 +174,18 @@ uv run mypy src/strata_harvest
 
 ### Adding a New Parser
 
-Each ATS provider gets its own parser module in `src/strata_harvest/parsers/`. Parsers extend the base class and implement `parse(url) -> list[JobListing]`. See `parsers/greenhouse.py` for the pattern.
+Each ATS provider gets its own parser module in `src/strata_harvest/parsers/`. Parsers extend `BaseParser` and implement `parse(content, *, url) -> list[JobListing]`. See [docs/adding-a-parser.md](docs/adding-a-parser.md) for the full walkthrough, or `parsers/greenhouse.py` for reference.
+
+### API Reference
+
+API documentation is auto-generated from docstrings using [mkdocs](https://www.mkdocs.org/) with the [mkdocstrings](https://mkdocstrings.github.io/) plugin.
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve
+```
+
+Then open http://localhost:8000 to browse the full API reference.
 
 ## License
 

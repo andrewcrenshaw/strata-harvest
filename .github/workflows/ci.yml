@@ -64,7 +64,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: pytest -m "not integration" --tb=short -q
+      - run: pytest -m verification --tb=short -q --cov=src/strata_harvest --cov-report=term-missing --cov-report=xml:coverage-verification.xml
 
   test-full:
     name: Tests (full suite, Python ${{ matrix.python-version }})
@@ -80,4 +80,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev,llm]"
-      - run: pytest --tb=short -q --cov=src/strata_harvest --cov-report=term-missing
+      - name: Run verification tests
+        run: pytest -m verification --tb=short -q --cov=src/strata_harvest --cov-report=xml:coverage-verification.xml
+      - name: Run integration tests
+        run: pytest -m integration --tb=short -q --cov=src/strata_harvest --cov-append --cov-report=xml:coverage-full.xml --cov-report=term-missing

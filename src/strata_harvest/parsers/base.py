@@ -17,6 +17,7 @@ class BaseParser(ABC):
     """Abstract base class for ATS parsers."""
 
     provider: ATSProvider = ATSProvider.UNKNOWN
+    is_stub: bool = False
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
@@ -29,9 +30,23 @@ class BaseParser(ABC):
         ...
 
     @classmethod
-    def for_provider(cls, provider: ATSProvider) -> BaseParser:
-        """Return the parser instance for a given ATS provider."""
+    def for_provider(cls, provider: ATSProvider, *, llm_provider: str | None = None) -> BaseParser:
+        """Return the parser instance for a given ATS provider.
+
+        Stub parsers (``is_stub=True``) automatically fall through to
+        :class:`~strata_harvest.parsers.llm_fallback.LLMFallbackParser`.
+        """
         from strata_harvest.parsers.llm_fallback import LLMFallbackParser
 
         parser_cls = _REGISTRY.get(provider, LLMFallbackParser)
+        if parser_cls.is_stub or parser_cls is LLMFallbackParser:
+            if llm_provider:
+                return LLMFallbackParser(llm_provider=llm_provider)
+            return LLMFallbackParser()
         return parser_cls()
+
+    @classmethod
+    def is_stub_provider(cls, provider: ATSProvider) -> bool:
+        """Return True if the registered parser for *provider* is a stub."""
+        parser_cls = _REGISTRY.get(provider)
+        return parser_cls is not None and parser_cls.is_stub

@@ -9,6 +9,7 @@ Requires the ``llm`` extra: ``pip install strata-harvest[llm]``
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -101,6 +102,11 @@ class LLMFallbackParser(BaseParser):
 
         Cleans the HTML, sends it to the configured LLM, and returns
         structured ``JobListing`` objects.  Returns an empty list on any error.
+
+        This method calls :func:`litellm.completion` synchronously and blocks the
+        caller until the model returns. For asyncio code (e.g.
+        :meth:`~strata_harvest.crawler.Crawler.scrape`), use :meth:`parse_async`
+        instead so the event loop is not blocked.
         """
         if not content or not content.strip():
             return []
@@ -113,18 +119,58 @@ class LLMFallbackParser(BaseParser):
             logger.warning("LLM fallback requires the llm extra: pip install strata-harvest[llm]")
             return []
 
+        return self._complete_and_parse(cleaned, url)
+
+    async def parse_async(self, content: str, *, url: str) -> list[JobListing]:
+        """Same as :meth:`parse`, but runs the LLM call in a worker thread.
+
+        Use this from async contexts so :func:`litellm.completion` does not block
+        the event loop (PCC-1606).
+        """
+        if not content or not content.strip():
+            return []
+
+        cleaned = _clean_html(content)
+        if not cleaned.strip():
+            return []
+
+        if litellm is None:
+            logger.warning("LLM fallback requires the llm extra: pip install strata-harvest[llm]")
+            return []
+
+        return await self._complete_and_parse_async(cleaned, url)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _completion_sync(self, cleaned: str, url: str) -> Any:
+        """Synchronous litellm call (runs in thread when using :meth:`parse_async`)."""
+        assert litellm is not None
+        return litellm.completion(
+            model=self._model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": USER_PROMPT_TEMPLATE.format(url=url, content=cleaned),
+                },
+            ],
+            temperature=0.0,
+        )
+
+    def _complete_and_parse(self, cleaned: str, url: str) -> list[JobListing]:
         try:
-            response = litellm.completion(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": USER_PROMPT_TEMPLATE.format(url=url, content=cleaned),
-                    },
-                ],
-                temperature=0.0,
-            )
+            response = self._completion_sync(cleaned, url)
+        except Exception:
+            logger.warning("LLM extraction failed for %s", url, exc_info=True)
+            return []
+
+        return self._parse_response(response)
+
+    async def _complete_and_parse_async(self, cleaned: str, url: str) -> list[JobListing]:
+        try:
+            response = await asyncio.to_thread(self._completion_sync, cleaned, url)
         except Exception:
             logger.warning("LLM extraction failed for %s", url, exc_info=True)
             return []
@@ -132,7 +178,7 @@ class LLMFallbackParser(BaseParser):
         return self._parse_response(response)
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Response parsing
     # ------------------------------------------------------------------
 
     def _parse_response(self, response: Any) -> list[JobListing]:

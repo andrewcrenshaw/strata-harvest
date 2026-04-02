@@ -10,7 +10,9 @@ Covers all acceptance criteria:
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -231,6 +233,60 @@ class TestLLMFallbackParse:
         call_kwargs = mock_litellm.completion.call_args
         messages = call_kwargs.kwargs.get("messages") or call_kwargs[1].get("messages")
         assert any("Hello" in str(m.get("content", "")) for m in messages)
+
+
+# ------------------------------------------------------------------
+# parse_async() — PCC-1606 non-blocking LLM path
+# ------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestLLMFallbackParseAsync:
+    """parse_async runs litellm in a thread pool so the event loop stays free."""
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    async def test_parse_async_matches_sync_parse(self, mock_litellm: MagicMock) -> None:
+        """AC3: Same extraction results as sync parse() for identical LLM output."""
+        mock_litellm.completion.return_value = STARTUP_LLM_RESPONSE
+        parser = LLMFallbackParser()
+        content = _load_fixture("startup_inline_careers.html")
+        url = "https://novatech-labs.com/careers"
+
+        sync_jobs = parser.parse(content, url=url)
+        mock_litellm.completion.reset_mock()
+        mock_litellm.completion.return_value = STARTUP_LLM_RESPONSE
+        async_jobs = await parser.parse_async(content, url=url)
+
+        assert len(sync_jobs) == len(async_jobs)
+        for a, b in zip(sync_jobs, async_jobs, strict=True):
+            assert a.model_dump() == b.model_dump()
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    async def test_parse_async_allows_other_coroutines_during_llm(
+        self,
+        mock_litellm: MagicMock,
+    ) -> None:
+        """AC1: Another task runs while the (slow) sync completion executes in a thread."""
+        order: list[str] = []
+
+        def slow_completion(*_a: object, **_kw: object) -> MagicMock:
+            time.sleep(0.2)
+            order.append("llm_done")
+            return STARTUP_LLM_RESPONSE
+
+        mock_litellm.completion.side_effect = slow_completion
+        parser = LLMFallbackParser()
+        content = _load_fixture("startup_inline_careers.html")
+
+        async def buddy() -> None:
+            await asyncio.sleep(0.02)
+            order.append("buddy_done")
+
+        await asyncio.gather(
+            parser.parse_async(content, url="https://novatech-labs.com/careers"),
+            buddy(),
+        )
+        assert order.index("buddy_done") < order.index("llm_done")
 
 
 # ------------------------------------------------------------------

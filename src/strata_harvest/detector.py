@@ -114,6 +114,7 @@ async def detect_ats(
     html: str | None = None,
     timeout: float = 15.0,
     user_agent: str | None = None,
+    allow_private: bool = False,
 ) -> ATSInfo:
     """Detect which ATS powers a career page.
 
@@ -133,6 +134,8 @@ async def detect_ats(
         HTTP timeout when this function must fetch the page.
     user_agent:
         Optional ``User-Agent`` header for the internal fetch.
+    allow_private:
+        Passed to :func:`~strata_harvest.utils.http.safe_fetch` when a fetch is required.
 
     Returns
     -------
@@ -158,7 +161,12 @@ async def detect_ats(
 
     if html is None:
         fetch_headers = {"User-Agent": user_agent} if user_agent else None
-        result = await safe_fetch(url, timeout=timeout, headers=fetch_headers)
+        result = await safe_fetch(
+            url,
+            timeout=timeout,
+            headers=fetch_headers,
+            allow_private=allow_private,
+        )
         if not result.ok or not result.content:
             return ATSInfo()
         html = result.content

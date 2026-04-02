@@ -1,0 +1,65 @@
+site_name: strata-harvest
+site_description: Career page scraping and ATS parsing library
+site_url: https://andrewcrenshaw.github.io/strata-harvest
+repo_url: https://github.com/andrewcrenshaw/strata-harvest
+repo_name: andrewcrenshaw/strata-harvest
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.expand
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - Guides:
+      - Adding a Parser: adding-a-parser.md
+      - LLM Configuration: llm-configuration.md
+      - Advanced Usage: advanced-usage.md
+  - API Reference:
+      - Public API: api/public.md
+      - Models: api/models.md
+      - Crawler: api/crawler.md
+      - Detector: api/detector.md
+      - Parsers: api/parsers.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            heading_level: 2
+            members_order: source
+            docstring_style: numpy
+            show_signature_annotations: true
+            separate_signature: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
