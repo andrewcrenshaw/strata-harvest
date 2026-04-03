@@ -569,7 +569,16 @@ class TestDoubleFetchElimination:
         assert sum(1 for c in fetch_mock.call_args_list if is_robots_txt_url(c[0][0])) == 1
 
     async def test_known_ats_fetch_unaffected(self) -> None:
-        """AC2: Known ATS providers (Greenhouse) still fetch correctly."""
+        """AC2/AC1: Known ATS providers (Greenhouse) use API redirect; detector doesn't fetch.
+
+        The crawler makes 2 safe_fetch calls for Greenhouse:
+          1. The entrypoint fetch (original URL)
+          2. The API URL fetch (boards-api.greenhouse.io) — AC1/AC4 redirect
+
+        The detector (safe_fetch in strata_harvest.detector) must NOT be invoked —
+        it receives the pre-fetched HTML content via the html= kwarg to avoid
+        a redundant page fetch.
+        """
         url = "https://boards.greenhouse.io/acme/jobs"
 
         crawler_fetch = AsyncMock(return_value=_ok_fetch(url))
@@ -582,7 +591,11 @@ class TestDoubleFetchElimination:
             c = create_crawler()
             result = await c.scrape(url)
 
-        crawler_fetch.assert_called_once()
+        # Crawler fetches twice: entrypoint + API redirect (AC1/AC4)
+        assert crawler_fetch.call_count == 2, (
+            "Expected 2 crawler fetches: entrypoint + API URL redirect for Greenhouse"
+        )
+        # Detector must NOT trigger its own fetch (double-fetch elimination still holds)
         detector_fetch.assert_not_called()
         assert len(result.jobs) == 2
 

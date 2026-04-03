@@ -209,15 +209,48 @@ class Crawler:
                 scrape_duration_ms=result.elapsed_ms,
             )
 
+        # --- API-first fetch strategy (AC1/AC4) ---
+        # For provider-API ATS boards (Greenhouse, Lever, Ashby), the entrypoint
+        # URL may serve HTML but the parsers expect structured JSON from the API.
+        # When the detected ATS has a canonical API URL distinct from the requested
+        # URL, re-fetch from the API endpoint so the parser receives the right payload.
+        fetch_result = result
+        if ats_info.provider in _ROBOTS_BYPASS_PROVIDERS and ats_info.api_url:
+            api_url = ats_info.api_url
+            # Only redirect when the effective fetch target differs from what we have.
+            # Normalise comparison: strip trailing slashes, ignore query string on original.
+            _orig_base = url.rstrip("/").split("?")[0]
+            _api_base = api_url.rstrip("/").split("?")[0]
+            if _api_base != _orig_base:
+                logger.debug(
+                    "Provider API redirect: %s → %s",
+                    url,
+                    api_url,
+                )
+                api_result = await safe_fetch(
+                    api_url,
+                    timeout=self._timeout,
+                    headers=fetch_headers,
+                    allow_private=self._allow_private,
+                )
+                if api_result.ok:
+                    fetch_result = api_result
+                else:
+                    logger.warning(
+                        "API fetch failed for %s (%s); falling back to entrypoint content",
+                        api_url,
+                        api_result.error or f"HTTP {api_result.status_code}",
+                    )
+
         parser = self._get_parser(ats_info.provider)
-        page_hash = content_hash(result.content or "")
+        page_hash = content_hash(fetch_result.content or "")
         changed = previous_hash is None or page_hash != previous_hash
         # LLM extraction is synchronous in litellm; run it in a thread so the
         # asyncio event loop stays responsive under concurrent scrapes (PCC-1606).
         if isinstance(parser, LLMFallbackParser):
-            jobs = await parser.parse_async(result.content or "", url=url)
+            jobs = await parser.parse_async(fetch_result.content or "", url=url)
         else:
-            jobs = parser.parse(result.content or "", url=url)
+            jobs = parser.parse(fetch_result.content or "", url=url)
 
         return ScrapeResult(
             url=url,
@@ -225,7 +258,8 @@ class Crawler:
             content_hash=page_hash,
             changed=changed,
             ats_info=ats_info,
-            scrape_duration_ms=result.elapsed_ms,
+            scrape_duration_ms=fetch_result.elapsed_ms,
+            fetch_ok=True,
         )
 
     async def scrape_batch(

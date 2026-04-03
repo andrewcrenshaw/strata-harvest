@@ -127,9 +127,10 @@ class FetchResult(BaseModel):
 class ScrapeResult(BaseModel):
     """Outcome of scraping one career-page URL.
 
-    Always inspect :attr:`error` and :attr:`jobs` together: a successful HTTP
-    response with no matching parser rows can yield an empty ``jobs`` list
-    without setting ``error``.
+    Always inspect :attr:`error`, :attr:`fetch_ok`, and :attr:`jobs` together:
+    a successful HTTP response with no matching parser rows yields an empty
+    ``jobs`` list without setting ``error``, but with :attr:`fetch_ok` True.
+    A hard failure sets ``error`` and has :attr:`fetch_ok` False.
 
     Attributes
     ----------
@@ -147,6 +148,11 @@ class ScrapeResult(BaseModel):
         Wall time spent on the scrape path in milliseconds.
     error:
         Human-readable failure when the scrape could not complete; ``None`` on success.
+    fetch_ok:
+        ``True`` when the HTTP fetch itself succeeded (status 2xx/3xx), even if
+        zero jobs were parsed.  ``False`` on transport errors, non-2xx responses,
+        or when the scrape was aborted before any fetch.
+        Use this to distinguish *silent empty parse* from *hard failure*.
 
     Examples
     --------
@@ -155,6 +161,13 @@ class ScrapeResult(BaseModel):
     'HTTP 404'
     >>> r.ok
     False
+    >>> r.fetch_ok
+    False
+    >>> zero = ScrapeResult(url="https://example.com/jobs", fetch_ok=True)
+    >>> zero.ok
+    False
+    >>> zero.fetch_ok
+    True
     """
 
     url: str
@@ -164,6 +177,7 @@ class ScrapeResult(BaseModel):
     ats_info: ATSInfo = Field(default_factory=ATSInfo)
     scrape_duration_ms: float = 0.0
     error: str | None = None
+    fetch_ok: bool = False
 
     @property
     def ok(self) -> bool:

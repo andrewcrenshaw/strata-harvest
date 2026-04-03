@@ -285,3 +285,60 @@ class TestScrapeResult:
         assert result.content_hash is not None
         assert len(result.content_hash) == 64
         assert all(c in "0123456789abcdef" for c in result.content_hash)
+
+    # ------------------------------------------------------------------
+    # AC3: fetch_ok — distinguish zero-job-success from hard failure
+    # ------------------------------------------------------------------
+
+    def test_fetch_ok_defaults_false(self) -> None:
+        """AC3: fetch_ok defaults to False (no fetch was attempted)."""
+        result = ScrapeResult(url="https://example.com")
+        assert result.fetch_ok is False
+
+    def test_fetch_ok_true_with_zero_jobs(self) -> None:
+        """AC3: fetch_ok=True + zero jobs = successful fetch, no parseable listings."""
+        result = ScrapeResult(url="https://example.com", fetch_ok=True)
+        assert result.fetch_ok is True
+        assert result.ok is False  # ok still False (no jobs)
+        assert result.error is None
+
+    def test_fetch_ok_true_with_jobs(self) -> None:
+        """AC3: fetch_ok=True + jobs = fully successful result."""
+        job = JobListing(title="Engineer", url="https://example.com/jobs/1")
+        result = ScrapeResult(url="https://example.com", jobs=[job], fetch_ok=True)
+        assert result.fetch_ok is True
+        assert result.ok is True
+
+    def test_fetch_ok_false_on_error(self) -> None:
+        """AC3: Hard failures have fetch_ok=False."""
+        result = ScrapeResult(url="https://example.com", error="HTTP 500")
+        assert result.fetch_ok is False
+        assert result.ok is False
+
+    def test_fetch_ok_differentiates_zero_jobs_from_failure(self) -> None:
+        """AC3: An empty-but-successful scrape is distinguishable from hard failure."""
+        empty_ok = ScrapeResult(url="https://example.com", fetch_ok=True)
+        failure = ScrapeResult(url="https://example.com", error="Connection refused")
+
+        assert empty_ok.fetch_ok is True   # HTTP succeeded
+        assert empty_ok.ok is False        # but no jobs parsed
+
+        assert failure.fetch_ok is False   # HTTP failed
+        assert failure.ok is False         # and no jobs
+
+    def test_fetch_ok_round_trip_json(self) -> None:
+        """AC3: fetch_ok serializes and deserializes correctly."""
+        original = ScrapeResult(url="https://example.com", fetch_ok=True)
+        json_str = original.model_dump_json()
+        restored = ScrapeResult.model_validate_json(json_str)
+        assert restored.fetch_ok is True
+
+    def test_fetch_ok_round_trip_dict(self) -> None:
+        """AC3: fetch_ok appears in dict serialization."""
+        result = ScrapeResult(url="https://example.com", fetch_ok=True)
+        data = result.model_dump()
+        assert "fetch_ok" in data
+        assert data["fetch_ok"] is True
+        restored = ScrapeResult.model_validate(data)
+        assert restored.fetch_ok is True
+

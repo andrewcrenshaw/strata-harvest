@@ -22,7 +22,11 @@ _URL_PATTERNS: list[tuple[re.Pattern[str], ATSProvider, str | None]] = [
         ATSProvider.GREENHOUSE,
         "https://boards-api.greenhouse.io/v1/boards/{board}/jobs",
     ),
-    (re.compile(r"jobs\.lever\.co"), ATSProvider.LEVER, None),
+    (
+        re.compile(r"jobs\.lever\.co"),
+        ATSProvider.LEVER,
+        "https://api.lever.co/v0/postings/{board}?mode=json",
+    ),
     (re.compile(r"jobs\.ashbyhq\.com|ashby\.io"), ATSProvider.ASHBY, None),
     (re.compile(r"\.myworkdayjobs\.com|workday\.com"), ATSProvider.WORKDAY, None),
     (re.compile(r"\.icims\.com|icims\.com"), ATSProvider.ICIMS, None),
