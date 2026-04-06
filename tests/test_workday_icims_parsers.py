@@ -339,17 +339,19 @@ class TestICIMSParser:
 
     def test_parse_json_api_array_format(self) -> None:
         """AC2: JSON array (some iCIMS instances return bare arrays)."""
-        data = json.dumps([
-            {
-                "title": "Dev Manager",
-                "applyurl": "https://example.icims.com/jobs/500/job",
-                "joblocation": "Dallas",
-            },
-            {
-                "title": "UX Designer",
-                "applyurl": "https://example.icims.com/jobs/501/job",
-            },
-        ])
+        data = json.dumps(
+            [
+                {
+                    "title": "Dev Manager",
+                    "applyurl": "https://example.icims.com/jobs/500/job",
+                    "joblocation": "Dallas",
+                },
+                {
+                    "title": "UX Designer",
+                    "applyurl": "https://example.icims.com/jobs/501/job",
+                },
+            ]
+        )
         parser = ICIMSParser()
         results = parser.parse(data, url="https://example.icims.com/jobs/search")
         assert len(results) == 2

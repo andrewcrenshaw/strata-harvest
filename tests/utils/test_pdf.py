@@ -11,6 +11,7 @@ def sample_pdf(tmp_path: Path) -> Path:
     # No, pypdfium2 can actually create a simple pdf
     try:
         import pypdfium2 as pdfium  # type: ignore[import-untyped]
+
         pdf = pdfium.PdfDocument.new()
 
         # Add a page
@@ -26,10 +27,12 @@ def sample_pdf(tmp_path: Path) -> Path:
     except ImportError:
         pytest.skip("pypdfium2 not installed")
 
+
 def test_single_page(sample_pdf: Path) -> None:
     # This will render both pages, but we can check if it returns bytes
     # The requirement mentions test_single_page. I will create a single page PDF here
     import pypdfium2 as pdfium
+
     single_page_pdf = sample_pdf.parent / "single.pdf"
     pdf = pdfium.PdfDocument.new()
     pdf.new_page(width=612, height=792)
@@ -40,10 +43,12 @@ def test_single_page(sample_pdf: Path) -> None:
     assert len(result) == 1
     assert isinstance(result[0], bytes)
 
+
 def test_multi_page_count(sample_pdf: Path) -> None:
     # sample_pdf has 2 pages
     result = pdf_to_images(sample_pdf, dpi=72)
     assert len(result) == 2
+
 
 def test_valid_png_output(sample_pdf: Path) -> None:
     result = pdf_to_images(sample_pdf, dpi=72)

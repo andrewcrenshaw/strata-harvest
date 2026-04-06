@@ -104,9 +104,7 @@ class WorkdayParser(BaseParser):
 
         return listings
 
-    def _json_ld_to_listing(
-        self, item: dict[str, Any], *, base_url: str
-    ) -> JobListing | None:
+    def _json_ld_to_listing(self, item: dict[str, Any], *, base_url: str) -> JobListing | None:
         """Convert a JSON-LD JobPosting dict to a JobListing."""
         title = item.get("title") or item.get("name")
         if not title:
@@ -185,15 +183,9 @@ class WorkdayParser(BaseParser):
 
         return listings
 
-    def _blob_item_to_listing(
-        self, item: dict[str, Any], *, base_url: str
-    ) -> JobListing | None:
+    def _blob_item_to_listing(self, item: dict[str, Any], *, base_url: str) -> JobListing | None:
         """Convert a Workday SPA JSON job item to a JobListing."""
-        title = (
-            item.get("title")
-            or item.get("jobTitle")
-            or item.get("name")
-        )
+        title = item.get("title") or item.get("jobTitle") or item.get("name")
         if not title:
             return None
 

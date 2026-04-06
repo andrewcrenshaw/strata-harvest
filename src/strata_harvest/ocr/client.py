@@ -14,6 +14,7 @@ class OcrResult:
     duration_ms: int = 0
     endpoint_used: str = ""
 
+
 async def ocr_image(
     image: bytes | Path | str,
     *,
@@ -29,10 +30,10 @@ async def ocr_image(
         payload = {}
         if isinstance(image, Path):
             data = image.read_bytes()
-            b64_data = base64.b64encode(data).decode('utf-8')
+            b64_data = base64.b64encode(data).decode("utf-8")
             payload["image"] = f"data:image/png;base64,{b64_data}"
         elif isinstance(image, bytes):
-            b64_data = base64.b64encode(image).decode('utf-8')
+            b64_data = base64.b64encode(image).decode("utf-8")
             payload["image"] = f"data:image/png;base64,{b64_data}"
         elif isinstance(image, str):
             if image.startswith("http://") or image.startswith("https://"):

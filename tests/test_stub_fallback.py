@@ -57,13 +57,17 @@ class TestParserResolution:
     def test_workday_parser_returns_list(self) -> None:
         """AC2: WorkdayParser.parse() returns a list (no exception)."""
         parser = WorkdayParser()
-        result = parser.parse("<html><body>No jobs</body></html>", url="https://company.wd5.myworkdayjobs.com/careers")
+        result = parser.parse(
+            "<html><body>No jobs</body></html>", url="https://company.wd5.myworkdayjobs.com/careers"
+        )
         assert isinstance(result, list)
 
     def test_icims_parser_returns_list(self) -> None:
         """AC2: ICIMSParser.parse() returns a list (no exception)."""
         parser = ICIMSParser()
-        result = parser.parse("<html><body>No jobs</body></html>", url="https://company.icims.com/jobs/search")
+        result = parser.parse(
+            "<html><body>No jobs</body></html>", url="https://company.icims.com/jobs/search"
+        )
         assert isinstance(result, list)
 
     def test_greenhouse_not_affected(self) -> None:

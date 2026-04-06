@@ -115,18 +115,13 @@ class ICIMSParser(BaseParser):
 
         return listings
 
-    def _api_item_to_listing(
-        self, item: dict[str, Any], *, base_url: str
-    ) -> JobListing | None:
+    def _api_item_to_listing(self, item: dict[str, Any], *, base_url: str) -> JobListing | None:
         """Convert an iCIMS JSON API result item to a JobListing."""
         if not isinstance(item, dict):
             return None
 
         title = (
-            item.get("jobtitle")
-            or item.get("title")
-            or item.get("jobTitle")
-            or item.get("name")
+            item.get("jobtitle") or item.get("title") or item.get("jobTitle") or item.get("name")
         )
         if not title:
             return None
@@ -143,11 +138,7 @@ class ICIMSParser(BaseParser):
         if job_url and not job_url.startswith("http"):
             job_url = urljoin(base_url, job_url)
 
-        location = (
-            item.get("joblocation")
-            or item.get("location")
-            or item.get("locationName")
-        )
+        location = item.get("joblocation") or item.get("location") or item.get("locationName")
 
         try:
             return JobListing(
@@ -187,9 +178,7 @@ class ICIMSParser(BaseParser):
 
         return listings
 
-    def _json_ld_to_listing(
-        self, item: dict[str, Any], *, base_url: str
-    ) -> JobListing | None:
+    def _json_ld_to_listing(self, item: dict[str, Any], *, base_url: str) -> JobListing | None:
         """Convert a JSON-LD JobPosting dict to a JobListing."""
         title = item.get("title") or item.get("name")
         if not title:

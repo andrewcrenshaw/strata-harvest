@@ -320,11 +320,11 @@ class TestScrapeResult:
         empty_ok = ScrapeResult(url="https://example.com", fetch_ok=True)
         failure = ScrapeResult(url="https://example.com", error="Connection refused")
 
-        assert empty_ok.fetch_ok is True   # HTTP succeeded
-        assert empty_ok.ok is False        # but no jobs parsed
+        assert empty_ok.fetch_ok is True  # HTTP succeeded
+        assert empty_ok.ok is False  # but no jobs parsed
 
-        assert failure.fetch_ok is False   # HTTP failed
-        assert failure.ok is False         # and no jobs
+        assert failure.fetch_ok is False  # HTTP failed
+        assert failure.ok is False  # and no jobs
 
     def test_fetch_ok_round_trip_json(self) -> None:
         """AC3: fetch_ok serializes and deserializes correctly."""
@@ -341,4 +341,3 @@ class TestScrapeResult:
         assert data["fetch_ok"] is True
         restored = ScrapeResult.model_validate(data)
         assert restored.fetch_ok is True
-

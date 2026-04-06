@@ -1,4 +1,3 @@
-
 from unittest import mock
 
 import httpx
@@ -54,9 +53,7 @@ async def test_fallback_on_probe_fail(endpoints: list[OcrEndpoint]) -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_cache_health_30s(endpoints: list[OcrEndpoint]) -> None:
-    route = respx.get("http://node01:8000/health").mock(
-        return_value=httpx.Response(200)
-    )
+    route = respx.get("http://node01:8000/health").mock(return_value=httpx.Response(200))
 
     router = OcrRouter(endpoints=endpoints)
     async with httpx.AsyncClient() as client:

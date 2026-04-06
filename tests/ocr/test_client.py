@@ -19,18 +19,14 @@ async def test_bytes_encoded() -> None:
     )
 
     async with httpx.AsyncClient() as client:
-        result = await ocr_image(
-            image=image_bytes,
-            client=client,
-            endpoint=endpoint,
-            timeout=5.0
-        )
+        result = await ocr_image(image=image_bytes, client=client, endpoint=endpoint, timeout=5.0)
 
     assert result.ok is True
     assert result.markdown == "Here is the parsed text"
     assert result.error is None
     assert result.duration_ms >= 0
     assert result.endpoint_used == endpoint
+
 
 @pytest.mark.asyncio
 @respx.mock
@@ -55,6 +51,7 @@ async def test_path_read(tmp_path: Path) -> None:
     assert result.ok is True
     assert result.markdown == "Output from file"
 
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_http_error_ok_false() -> None:
@@ -62,9 +59,7 @@ async def test_http_error_ok_false() -> None:
     image_str = "http://example.com/image.png"
 
     # Mock endpoint mapping to error
-    respx.post(endpoint).mock(
-        return_value=httpx.Response(500, text="Internal Server Error")
-    )
+    respx.post(endpoint).mock(return_value=httpx.Response(500, text="Internal Server Error"))
 
     async with httpx.AsyncClient() as client:
         result = await ocr_image(

@@ -256,7 +256,7 @@ class Crawler:
         changed = previous_hash is None or page_hash != previous_hash
 
         html_content = fetch_result.content or ""
-        stripped_text = re.sub(r'<[^>]+>', ' ', html_content).strip()
+        stripped_text = re.sub(r"<[^>]+>", " ", html_content).strip()
 
         trigger_ocr = (
             len(stripped_text) < 200
@@ -264,6 +264,7 @@ class Crawler:
             and self._ocr_router is not None
         )
         if trigger_ocr:
+            assert self._ocr_router is not None  # narrowed: trigger_ocr guards this branch
             raw_bytes = html_content.encode("utf-8")
             async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as ocr_client:
                 ocr_result = await self._ocr_router.run(raw_bytes, client=ocr_client)
