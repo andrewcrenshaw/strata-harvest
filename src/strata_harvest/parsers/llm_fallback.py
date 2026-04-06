@@ -94,8 +94,9 @@ class LLMFallbackParser(BaseParser):
 
     provider = ATSProvider.UNKNOWN
 
-    def __init__(self, *, llm_provider: str | None = None) -> None:
+    def __init__(self, *, llm_provider: str | None = None, api_base: str | None = None) -> None:
         self._model = llm_provider or DEFAULT_MODEL
+        self._api_base = api_base  # e.g. "http://192.168.50.220:8080" — caller's responsibility
 
     def parse(self, content: str, *, url: str) -> list[JobListing]:
         """Parse raw HTML content using LLM extraction.
@@ -147,17 +148,21 @@ class LLMFallbackParser(BaseParser):
     def _completion_sync(self, cleaned: str, url: str) -> Any:
         """Synchronous litellm call (runs in thread when using :meth:`parse_async`)."""
         assert litellm is not None
-        return litellm.completion(
-            model=self._model,
-            messages=[
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": USER_PROMPT_TEMPLATE.format(url=url, content=cleaned),
                 },
             ],
-            temperature=0.0,
-        )
+            "temperature": 0.0,
+        }
+        if self._api_base:
+            kwargs["api_base"] = self._api_base
+            kwargs["api_key"] = "not-required"
+        return litellm.completion(**kwargs)
 
     def _complete_and_parse(self, cleaned: str, url: str) -> list[JobListing]:
         try:

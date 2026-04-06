@@ -30,7 +30,13 @@ class BaseParser(ABC):
         ...
 
     @classmethod
-    def for_provider(cls, provider: ATSProvider, *, llm_provider: str | None = None) -> BaseParser:
+    def for_provider(
+        cls,
+        provider: ATSProvider,
+        *,
+        llm_provider: str | None = None,
+        api_base: str | None = None,
+    ) -> BaseParser:
         """Return the parser instance for a given ATS provider.
 
         Stub parsers (``is_stub=True``) automatically fall through to
@@ -40,8 +46,8 @@ class BaseParser(ABC):
 
         parser_cls = _REGISTRY.get(provider, LLMFallbackParser)
         if parser_cls.is_stub or parser_cls is LLMFallbackParser:
-            if llm_provider:
-                return LLMFallbackParser(llm_provider=llm_provider)
+            if llm_provider or api_base:
+                return LLMFallbackParser(llm_provider=llm_provider, api_base=api_base)
             return LLMFallbackParser()
         return parser_cls()
 

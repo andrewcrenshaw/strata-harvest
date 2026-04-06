@@ -420,6 +420,40 @@ class TestLLMFallbackProvider:
 
 
 # ------------------------------------------------------------------
+# api_base forwarding (PCC-1685)
+# ------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestLLMFallbackApiBase:
+    """AC: api_base and api_key are forwarded to litellm.completion when set."""
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_api_base_forwarded_to_litellm(self, mock_litellm: MagicMock) -> None:
+        """When api_base is provided, litellm.completion receives api_base and api_key."""
+        mock_litellm.completion.return_value = _make_llm_response([])
+        parser = LLMFallbackParser(api_base="http://192.168.50.220:8080")
+        parser.parse("<html><body>Jobs</body></html>", url="https://example.com")
+
+        call_kwargs = mock_litellm.completion.call_args
+        kwargs = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]
+        assert kwargs.get("api_base") == "http://192.168.50.220:8080"
+        assert kwargs.get("api_key") == "not-required"
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_api_base_none_no_kwarg(self, mock_litellm: MagicMock) -> None:
+        """When api_base is not set, api_base and api_key are NOT sent to litellm."""
+        mock_litellm.completion.return_value = _make_llm_response([])
+        parser = LLMFallbackParser()
+        parser.parse("<html><body>Jobs</body></html>", url="https://example.com")
+
+        call_kwargs = mock_litellm.completion.call_args
+        kwargs = call_kwargs.kwargs if call_kwargs.kwargs else call_kwargs[1]
+        assert "api_base" not in kwargs
+        assert "api_key" not in kwargs
+
+
+# ------------------------------------------------------------------
 # Error handling
 # ------------------------------------------------------------------
 

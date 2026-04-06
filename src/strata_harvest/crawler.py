@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
+
+import httpx
 
 from strata_harvest.detector import detect_ats, detect_from_url
 from strata_harvest.models import ATSProvider, JobListing, ScrapeResult
@@ -31,6 +34,8 @@ _ROBOTS_BYPASS_PROVIDERS: frozenset[ATSProvider] = frozenset(
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    from strata_harvest.ocr.router import OcrRouter
 
 _DEFAULT_RATE_LIMIT: float = 0.5  # global max requests per second (upper bound)
 _DEFAULT_PER_DOMAIN_RATE: float = 0.5  # requests per second per hostname
@@ -88,9 +93,11 @@ class Crawler:
         headless: bool = False,
         proxy: str | None = None,
         llm_provider: str | None = None,
+        llm_api_base: str | None = None,
         allow_private: bool = False,
         respect_robots: bool = True,
         robots_cache_ttl: float = 3600.0,
+        ocr_router: OcrRouter | None = None,
     ) -> None:
         self._global_rate_limiter = RateLimiter(requests_per_second=rate_limit)
         self._per_domain_registry = PerDomainRateLimiterRegistry(
@@ -102,12 +109,14 @@ class Crawler:
         self._headless = headless
         self._proxy = proxy
         self._llm_provider = llm_provider
+        self._llm_api_base = llm_api_base
         self._allow_private = allow_private
         self._respect_robots = respect_robots
         self._robots_checker = RobotsTxtChecker(
             ttl_seconds=robots_cache_ttl,
             user_agent=user_agent,
         )
+        self._ocr_router = ocr_router
 
     async def _acquire_rate_limits(self, url: str) -> None:
         """Apply global and per-hostname rate limits (global is the upper bound)."""
@@ -245,12 +254,37 @@ class Crawler:
         parser = self._get_parser(ats_info.provider)
         page_hash = content_hash(fetch_result.content or "")
         changed = previous_hash is None or page_hash != previous_hash
-        # LLM extraction is synchronous in litellm; run it in a thread so the
-        # asyncio event loop stays responsive under concurrent scrapes (PCC-1606).
-        if isinstance(parser, LLMFallbackParser):
-            jobs = await parser.parse_async(fetch_result.content or "", url=url)
+
+        html_content = fetch_result.content or ""
+        stripped_text = re.sub(r'<[^>]+>', ' ', html_content).strip()
+
+        trigger_ocr = (
+            len(stripped_text) < 200
+            and ats_info.provider == ATSProvider.UNKNOWN
+            and self._ocr_router is not None
+        )
+        if trigger_ocr:
+            raw_bytes = html_content.encode("utf-8")
+            async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as ocr_client:
+                ocr_result = await self._ocr_router.run(raw_bytes, client=ocr_client)
+            if ocr_result.ok and ocr_result.markdown:
+                logger.info("OCR triggered for %s. Extracted markdown.", url)
+                # Feed OCR markdown through LLM fallback parser
+                if isinstance(parser, LLMFallbackParser):
+                    jobs = await parser.parse_async(ocr_result.markdown, url=url)
+                else:
+                    jobs = parser.parse(ocr_result.markdown, url=url)
+            else:
+                if ocr_result.error:
+                    logger.warning("OCR failed for %s: %s", url, ocr_result.error)
+                jobs = []
         else:
-            jobs = parser.parse(fetch_result.content or "", url=url)
+            # LLM extraction is synchronous in litellm; run it in a thread so the
+            # asyncio event loop stays responsive under concurrent scrapes (PCC-1606).
+            if isinstance(parser, LLMFallbackParser):
+                jobs = await parser.parse_async(html_content, url=url)
+            else:
+                jobs = parser.parse(html_content, url=url)
 
         return ScrapeResult(
             url=url,
@@ -315,12 +349,16 @@ class Crawler:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     def _get_parser(self, provider: ATSProvider) -> BaseParser:
-        """Return the appropriate parser, wiring llm_provider if needed.
+        """Return the appropriate parser, wiring llm_provider and llm_api_base if needed.
 
         Stub parsers fall through to LLM extraction automatically via
         ``BaseParser.for_provider()``.
         """
-        return BaseParser.for_provider(provider, llm_provider=self._llm_provider)
+        return BaseParser.for_provider(
+            provider,
+            llm_provider=self._llm_provider,
+            api_base=self._llm_api_base,
+        )
 
 
 def create_crawler(
@@ -333,9 +371,11 @@ def create_crawler(
     headless: bool = False,
     proxy: str | None = None,
     llm_provider: str | None = None,
+    llm_api_base: str | None = None,
     allow_private: bool = False,
     respect_robots: bool = True,
     robots_cache_ttl: float = 3600.0,
+    ocr_router: OcrRouter | None = None,
 ) -> Crawler:
     """Build a :class:`Crawler` with explicit tuning knobs.
 
@@ -359,6 +399,11 @@ def create_crawler(
     llm_provider:
         LiteLLM model string for the LLM fallback parser when the ATS cannot
         be identified (e.g. ``openai/gpt-4o-mini``). Install ``strata-harvest[llm]``.
+    llm_api_base:
+        Base URL for a custom LLM inference endpoint (e.g. a local model server).
+        Passed directly to :class:`~strata_harvest.parsers.llm_fallback.LLMFallbackParser`
+        as ``api_base``; the caller is responsible for supplying the correct address.
+        When set, ``api_key`` is automatically sent as ``"not-required"``.
     allow_private:
         When True, allow fetches to private/loopback/link-local hosts (testing only).
     respect_robots:
@@ -387,9 +432,11 @@ def create_crawler(
         headless=headless,
         proxy=proxy,
         llm_provider=llm_provider,
+        llm_api_base=llm_api_base,
         allow_private=allow_private,
         respect_robots=respect_robots,
         robots_cache_ttl=robots_cache_ttl,
+        ocr_router=ocr_router,
     )
 
 

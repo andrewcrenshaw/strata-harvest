@@ -131,6 +131,15 @@ class TestCreateCrawler:
         c = create_crawler()
         assert c._llm_provider is None
 
+    def test_llm_api_base_stored(self) -> None:
+        """AC: llm_api_base is stored and forwarded to LLMFallbackParser."""
+        c = create_crawler(llm_api_base="http://192.168.50.220:8080")
+        assert c._llm_api_base == "http://192.168.50.220:8080"
+
+    def test_defaults_llm_api_base_none(self) -> None:
+        c = create_crawler()
+        assert c._llm_api_base is None
+
     def test_respect_robots_default_true(self) -> None:
         c = create_crawler()
         assert c._respect_robots is True
@@ -684,6 +693,94 @@ class TestDoubleFetchElimination:
         assert call_kwargs.kwargs.get("html") == html, (
             "detect_ats must receive pre-fetched HTML to avoid redundant fetch"
         )
+
+
+# ---------------------------------------------------------------------------
+# OCR Fallback
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestCrawlerOcrFallback:
+    async def test_ocr_triggered_when_sparse(self) -> None:
+        from strata_harvest.ocr.client import OcrResult
+        from strata_harvest.ocr.router import OcrRouter
+
+        url = "https://example.com/careers"
+        html = "<html><body><img src='jobs.png'></body></html>"
+        fetch_mock = make_fetch_with_robots(
+            page=FetchResult(url=url, status_code=200, content=html, elapsed_ms=10.0)
+        )
+        mock_router = MagicMock(spec=OcrRouter)
+        mock_router.run = AsyncMock(
+            return_value=OcrResult(ok=True, markdown="Extracted Markdown", duration_ms=10)
+        )
+
+        with (
+            patch_all_safe_fetch(fetch_mock),
+            patch("strata_harvest.crawler.detect_ats", new_callable=AsyncMock) as mock_detect,
+        ):
+            mock_detect.return_value = ATSInfo(provider=ATSProvider.UNKNOWN)
+            c = create_crawler(ocr_router=mock_router)
+            with patch.object(c, "_get_parser") as mock_get_parser:
+                parser_mock = MagicMock()
+                parser_mock.parse.return_value = [JobListing(title="OCR Job", url=url)]
+                mock_get_parser.return_value = parser_mock
+
+                result = await c.scrape(url)
+
+                mock_router.run.assert_awaited_once()
+                parser_mock.parse.assert_called_once_with("Extracted Markdown", url=url)
+                assert len(result.jobs) == 1
+
+    async def test_ocr_skipped_when_rich(self) -> None:
+        from strata_harvest.ocr.router import OcrRouter
+
+        url = "https://example.com/careers"
+        html = "<html><body>" + ("<p>Text</p>" * 50) + "</body></html>"
+        fetch_mock = make_fetch_with_robots(
+            page=FetchResult(url=url, status_code=200, content=html, elapsed_ms=10.0)
+        )
+        mock_router = MagicMock(spec=OcrRouter)
+        mock_router.run = AsyncMock()
+
+        with (
+            patch_all_safe_fetch(fetch_mock),
+            patch("strata_harvest.crawler.detect_ats", new_callable=AsyncMock) as mock_detect,
+        ):
+            mock_detect.return_value = ATSInfo(provider=ATSProvider.UNKNOWN)
+            c = create_crawler(ocr_router=mock_router)
+            with patch.object(c, "_get_parser") as mock_get_parser:
+                parser_mock = MagicMock()
+                parser_mock.parse.return_value = []
+                mock_get_parser.return_value = parser_mock
+
+                await c.scrape(url)
+
+                mock_router.run.assert_not_called()
+                parser_mock.parse.assert_called_once_with(html, url=url)
+
+    async def test_ocr_none_silently_skipped(self) -> None:
+        url = "https://example.com/careers"
+        html = "<html><body><img src='jobs.png'></body></html>"
+        fetch_mock = make_fetch_with_robots(
+            page=FetchResult(url=url, status_code=200, content=html, elapsed_ms=10.0)
+        )
+
+        with (
+            patch_all_safe_fetch(fetch_mock),
+            patch("strata_harvest.crawler.detect_ats", new_callable=AsyncMock) as mock_detect,
+        ):
+            mock_detect.return_value = ATSInfo(provider=ATSProvider.UNKNOWN)
+            c = create_crawler(ocr_router=None)  # No OCR
+            with patch.object(c, "_get_parser") as mock_get_parser:
+                parser_mock = MagicMock()
+                parser_mock.parse.return_value = []
+                mock_get_parser.return_value = parser_mock
+
+                await c.scrape(url)
+
+                parser_mock.parse.assert_called_once_with(html, url=url)
 
 
 # ---------------------------------------------------------------------------
