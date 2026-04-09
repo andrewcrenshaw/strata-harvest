@@ -5,7 +5,7 @@ from pathlib import Path
 def pdf_to_images(pdf_path: Path, dpi: int = 150) -> list[bytes]:
     """Render each PDF page to PNG bytes via pypdfium2 (Apple Silicon native)."""
     try:
-        import pypdfium2 as pdfium  # type: ignore[import-untyped]
+        import pypdfium2 as pdfium
     except ImportError as e:
         raise ImportError(
             "pypdfium2 is required for PDF rendering. "
