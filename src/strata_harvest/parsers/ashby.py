@@ -20,8 +20,8 @@ _TAG_PATTERN = re.compile(r"<[^>]+>")
 # Slug extraction patterns for custom-domain Ashby career pages (ENH-04 / PCC-1736).
 # Primary: JSON config blob embedded in page HTML.
 _SLUG_PATTERN_JSON = re.compile(r'"organizationHostedJobsPageName"\s*:\s*"([^"]+)"')
-# Fallback: ashbyhq.com/job-board/<slug> URL anywhere in the DOM.
-_SLUG_PATTERN_URL = re.compile(r'ashbyhq\.com/job-board/([^/"\s]+)')
+# Fallback: ashbyhq.com/... URL anywhere in the DOM.
+_SLUG_PATTERN_URL = re.compile(r'ashbyhq\.com(?:/job-board)?/([^/"\s\?#]+)')
 _LI_PATTERN = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL | re.IGNORECASE)
 
 GRAPHQL_ENDPOINT = "https://jobs.ashbyhq.com/api/non-user-graphql"
@@ -31,27 +31,16 @@ query JobBoardWithPostings($organizationHostedJobsPageName: String!) {
   jobBoard: jobBoardWithTeams(
     organizationHostedJobsPageName: $organizationHostedJobsPageName
   ) {
-    title
     jobPostings {
       id
       title
-      publishedDate
-      updatedAt
       employmentType
       locationName
-      isRemote
-      teamName
-      departmentName
-      descriptionHtml
-      descriptionPlain
-      compensationTierSummary
-      jobUrl
-      applyUrl
-      isListed
+      workplaceType
       secondaryLocations {
         locationName
       }
-      compensation
+      compensationTierSummary
     }
   }
 }"""
@@ -61,23 +50,13 @@ query JobPosting($jobPostingId: String!) {
   jobPosting(id: $jobPostingId) {
     id
     title
-    publishedDate
-    updatedAt
     employmentType
     locationName
-    isRemote
-    teamName
-    departmentName
-    descriptionHtml
-    descriptionPlain
-    compensationTierSummary
-    jobUrl
-    applyUrl
-    isListed
+    workplaceType
     secondaryLocations {
       locationName
     }
-    compensation
+    compensationTierSummary
   }
 }"""
 
@@ -194,14 +173,10 @@ class AshbyParser(BaseParser):
     def build_graphql_url(url: str) -> str:
         """Build the Ashby GraphQL endpoint URL.
 
-        For standard Ashby-hosted pages (``jobs.ashbyhq.com``), returns
-        the canonical endpoint. For custom domains, constructs a
-        best-effort API path.
+        Always returns the canonical Ashby GraphQL endpoint, even for
+        custom-domain career pages, as companies don't typically proxy it.
         """
-        parsed = urlparse(url)
-        if "ashbyhq.com" in parsed.netloc:
-            return GRAPHQL_ENDPOINT
-        return f"{parsed.scheme}://{parsed.netloc}/api/non-user-graphql"
+        return GRAPHQL_ENDPOINT
 
     @staticmethod
     def extract_org_slug(url: str) -> str:
@@ -233,9 +208,13 @@ class AshbyParser(BaseParser):
         m = _SLUG_PATTERN_JSON.search(html)
         if m:
             return m.group(1)
-        m = _SLUG_PATTERN_URL.search(html)
-        if m:
-            return m.group(1)
+
+        # Find all URL matches and take the first valid one
+        for m in _SLUG_PATTERN_URL.finditer(html):
+            slug = m.group(1)
+            if slug not in ("api", "job-board"):
+                return slug
+
         return None
 
     @staticmethod
@@ -312,7 +291,10 @@ class AshbyParser(BaseParser):
     def _build_location(posting: dict[str, Any]) -> str | None:
         """Combine primary location with remote flag and secondary locations."""
         primary_raw = posting.get("locationName")
-        is_remote = posting.get("isRemote", False)
+        is_remote = (
+            posting.get("isRemote", False)
+            or str(posting.get("workplaceType", "")).lower() == "remote"
+        )
 
         if not primary_raw and is_remote:
             return "Remote"
