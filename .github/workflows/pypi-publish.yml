@@ -35,5 +35,5 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        # Trusted publishing (OIDC): do not set `password`. For token upload, add:
-        # with: { password: ${{ secrets.PYPI_API_TOKEN }} }
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
