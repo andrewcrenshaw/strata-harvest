@@ -1,0 +1,51 @@
+---
+description: Shared PDT API and session lifecycle rules for all projects in the ~/Development workspace
+globs:
+alwaysApply: true
+---
+
+# PDT Shared Infrastructure
+
+This project belongs to the Andrew Crenshaw development workspace. All backlog, session, and ticket operations use the shared PDT API in `autogenous-synthesis`.
+
+## API Location
+
+| | |
+|-|-|
+| **Base URL** | `http://localhost:5176/api` |
+| **Dashboard** | `http://localhost:5175` |
+| **Start** | `cd ~/Development/autogenous-synthesis && npm run start:dashboard` |
+| **Health check** | `curl http://localhost:5176/api` |
+
+## If the server is not running
+
+```bash
+cd ~/Development/autogenous-synthesis && npm run start:dashboard
+```
+
+Wait ~3 seconds, then re-run your curl command.
+
+## Create a Ticket
+
+```bash
+curl -s -X POST http://localhost:5176/api/backlog \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "...",
+    "type": "implementation",
+    "priority": "high",
+    "description": "...",
+    "repo": "<this-project-name>"
+  }'
+```
+
+## Session Lifecycle
+
+Register → scratchpad → claim → work → submit → end. Use `/session` workflow.
+
+Scratchpads live in **this project's** `.agent-data/scratchpads/active/` — not in `autogenous-synthesis`.
+
+## Docs
+
+Full guide: `~/Development/autogenous-synthesis/docs/guides/AGENT_BOOTSTRAP.md`
+Ticket guide: `~/Development/autogenous-synthesis/docs/guides/CORE_PDT_BACKLOG_TICKET_GUIDE.md`

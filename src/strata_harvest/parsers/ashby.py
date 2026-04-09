@@ -16,6 +16,12 @@ from strata_harvest.utils.http import safe_fetch
 logger = logging.getLogger(__name__)
 
 _TAG_PATTERN = re.compile(r"<[^>]+>")
+
+# Slug extraction patterns for custom-domain Ashby career pages (ENH-04 / PCC-1736).
+# Primary: JSON config blob embedded in page HTML.
+_SLUG_PATTERN_JSON = re.compile(r'"organizationHostedJobsPageName"\s*:\s*"([^"]+)"')
+# Fallback: ashbyhq.com/job-board/<slug> URL anywhere in the DOM.
+_SLUG_PATTERN_URL = re.compile(r'ashbyhq\.com/job-board/([^/"\s]+)')
 _LI_PATTERN = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL | re.IGNORECASE)
 
 GRAPHQL_ENDPOINT = "https://jobs.ashbyhq.com/api/non-user-graphql"
@@ -135,14 +141,32 @@ class AshbyParser(BaseParser):
         cls,
         url: str,
         *,
+        html: str | None = None,
         client: Any = None,
     ) -> list[JobListing]:
         """Fetch all postings from an Ashby job board via GraphQL.
 
-        Converts *url* to the org slug, builds a GraphQL query,
-        and POSTs to the Ashby non-user GraphQL endpoint.
+        Resolves the org slug from *url* first; if *html* is provided (e.g. a
+        custom-domain career page that embeds Ashby), the slug is extracted
+        from the HTML instead, which is required when the URL path contains no
+        slug (ENH-04 / PCC-1736).
+
+        If no slug can be determined, logs a warning and returns ``[]``.
         """
-        org_slug = cls.extract_org_slug(url)
+        # Prefer slug from HTML for custom-domain pages; fall back to URL.
+        org_slug: str | None = None
+        if html is not None:
+            org_slug = cls.extract_slug_from_html(html)
+            if not org_slug:
+                logger.warning(
+                    "Ashby: could not extract tenant slug from HTML for %s; "
+                    "returning empty results",
+                    url,
+                )
+                return []
+        else:
+            org_slug = cls.extract_org_slug(url)
+
         api_url = cls.build_graphql_url(url)
         payload = cls.build_job_board_query(org_slug)
 
@@ -190,6 +214,29 @@ class AshbyParser(BaseParser):
         if parts and parts[0] != "api":
             return parts[0]
         return parsed.netloc.split(".")[0]
+
+    @staticmethod
+    def extract_slug_from_html(html: str) -> str | None:
+        """Extract the Ashby tenant slug from career page HTML.
+
+        Tries two patterns in order of reliability:
+
+        1. ``"organizationHostedJobsPageName": "<slug>"`` — JSON config blob
+           injected by Ashby into the page (most specific).
+        2. ``ashbyhq.com/job-board/<slug>`` — URL embedded in a ``<script>``
+           tag, iframe ``src``, or anchor ``href``.
+
+        Returns ``None`` when no slug can be found.
+        """
+        if not html:
+            return None
+        m = _SLUG_PATTERN_JSON.search(html)
+        if m:
+            return m.group(1)
+        m = _SLUG_PATTERN_URL.search(html)
+        if m:
+            return m.group(1)
+        return None
 
     @staticmethod
     def build_job_board_query(org_slug: str) -> dict[str, Any]:

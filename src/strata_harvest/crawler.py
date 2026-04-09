@@ -18,6 +18,7 @@ import httpx
 
 from strata_harvest.detector import detect_ats, detect_from_url
 from strata_harvest.models import ATSProvider, JobListing, ScrapeResult
+from strata_harvest.parsers.ashby import AshbyParser
 from strata_harvest.parsers.base import BaseParser
 from strata_harvest.parsers.llm_fallback import LLMFallbackParser
 from strata_harvest.utils.hashing import content_hash
@@ -280,9 +281,19 @@ class Crawler:
                     logger.warning("OCR failed for %s: %s", url, ocr_result.error)
                 jobs = []
         else:
+            # ENH-04 / PCC-1736: For Ashby pages detected from DOM (custom domain,
+            # api_url=None, detection_method="dom_probe"), html_content is a career
+            # page that embeds Ashby — not a GraphQL JSON response.  Extract the org
+            # slug from HTML and query the GraphQL API directly.
+            if (
+                ats_info.provider == ATSProvider.ASHBY
+                and ats_info.detection_method == "dom_probe"
+                and isinstance(parser, AshbyParser)
+            ):
+                jobs = await AshbyParser.fetch_all(url, html=html_content)
             # LLM extraction is synchronous in litellm; run it in a thread so the
             # asyncio event loop stays responsive under concurrent scrapes (PCC-1606).
-            if isinstance(parser, LLMFallbackParser):
+            elif isinstance(parser, LLMFallbackParser):
                 jobs = await parser.parse_async(html_content, url=url)
             else:
                 jobs = parser.parse(html_content, url=url)

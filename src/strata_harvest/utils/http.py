@@ -74,8 +74,8 @@ async def _ssrf_block_reason(url: str, allow_private: bool) -> str | None:
     return None
 
 
-async def _read_bytes_limited(response: httpx.Response, max_bytes: int) -> bytes:
-    """Read at most *max_bytes* from a streaming response body."""
+async def _read_error_body_limited(response: httpx.Response, max_bytes: int) -> str:
+    """Read at most *max_bytes* from a streaming response body for error reporting."""
     chunks: list[bytes] = []
     total = 0
     async for chunk in response.aiter_bytes():
@@ -87,24 +87,7 @@ async def _read_bytes_limited(response: httpx.Response, max_bytes: int) -> bytes
             total += take
         if total >= max_bytes:
             break
-    return b"".join(chunks)
-
-
-async def _read_body_with_cap(
-    response: httpx.Response, max_bytes: int
-) -> tuple[bytes | None, str | None]:
-    """Read full body; return (bytes, None) or (None, error) if *max_bytes* exceeded."""
-    chunks: list[bytes] = []
-    total = 0
-    async for chunk in response.aiter_bytes():
-        total += len(chunk)
-        if total > max_bytes:
-            return None, (
-                "Response body exceeds max_response_bytes "
-                f"(received at least {total} bytes, limit {max_bytes} bytes)"
-            )
-        chunks.append(chunk)
-    return b"".join(chunks), None
+    return b"".join(chunks).decode("utf-8", errors="replace")
 
 
 async def safe_fetch(
@@ -135,9 +118,10 @@ async def safe_fetch(
     addresses are rejected (SSRF mitigation). Set *allow_private* to True
     only for controlled tests or trusted environments.
 
-    Response bodies are read in chunks; if the total exceeds *max_response_bytes*
-    (default 10 MiB), the fetch fails with a structured error and does not
-    retain the full body.
+    Response bodies are fully read via ``aread()`` so that httpx handles
+    content-encoding (gzip, brotli, zstd) transparently. If the decoded body
+    exceeds *max_response_bytes* (default 10 MiB), the fetch fails with a
+    structured error rather than retaining the oversized payload.
     """
     block = await _ssrf_block_reason(url, allow_private)
     if block:
@@ -161,6 +145,11 @@ async def safe_fetch(
     try:
         for attempt in range(retries + 1):
             try:
+                # Use client.stream() so we can enforce the size cap before
+                # buffering the full body.  Inside the context, response.aread()
+                # triggers httpx's built-in content-encoding decompression
+                # (gzip, deflate, brotli, zstd) — unlike aiter_bytes() which
+                # yields raw compressed wire bytes and requires manual decoding.
                 async with client.stream(
                     method,
                     url,
@@ -171,8 +160,7 @@ async def safe_fetch(
                     duration = _now_ms() - start_ms
 
                     if response.status_code >= 400:
-                        err_bytes = await _read_bytes_limited(response, 200)
-                        error_body = err_bytes.decode("utf-8", errors="replace")
+                        error_body = await _read_error_body_limited(response, 200)
                         last_error = f"HTTP {response.status_code}: {error_body}"
                         if attempt < retries:
                             await asyncio.sleep(2.0 * (attempt + 1))
@@ -184,22 +172,41 @@ async def safe_fetch(
                             elapsed_ms=duration,
                         )
 
-                    body_bytes, size_error = await _read_body_with_cap(response, max_response_bytes)
-                    if size_error:
+                    # Check Content-Length header first for a cheap size guard.
+                    content_length_str = response.headers.get("content-length")
+                    if content_length_str is not None:
+                        try:
+                            declared_length = int(content_length_str)
+                            if declared_length > max_response_bytes:
+                                return FetchResult(
+                                    url=url,
+                                    error=(
+                                        "Response body exceeds max_response_bytes "
+                                        f"(Content-Length: {declared_length} bytes, "
+                                        f"limit {max_response_bytes} bytes)"
+                                    ),
+                                    elapsed_ms=duration,
+                                )
+                        except ValueError:
+                            pass
+
+                    # aread() decompresses the body (gzip/brotli/zstd/deflate)
+                    # transparently.  This is the correct approach versus
+                    # aiter_bytes(), which yields raw compressed bytes.
+                    content_bytes = await response.aread()
+                    if len(content_bytes) > max_response_bytes:
                         return FetchResult(
                             url=url,
-                            error=size_error,
+                            error=(
+                                "Response body exceeds max_response_bytes "
+                                f"(received {len(content_bytes)} bytes, "
+                                f"limit {max_response_bytes} bytes)"
+                            ),
                             elapsed_ms=duration,
                         )
 
-                    synthetic = httpx.Response(
-                        status_code=response.status_code,
-                        content=body_bytes,
-                        headers=response.headers,
-                        request=response.request,
-                    )
-                    data = _parse_response_data(synthetic)
-                    text = synthetic.text
+                    text = content_bytes.decode(response.encoding or "utf-8", errors="replace")
+                    data = _parse_text_data(text)
 
                     return FetchResult(
                         url=url,
@@ -210,7 +217,12 @@ async def safe_fetch(
                         elapsed_ms=duration,
                     )
 
-            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as exc:
+            except (
+                httpx.TimeoutException,
+                httpx.ConnectError,
+                httpx.ReadError,
+                httpx.DecodingError,  # brotli/gzip/zstd decode failures
+            ) as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
                 if attempt < retries:
                     await asyncio.sleep(2.0 * (attempt + 1))
@@ -226,12 +238,14 @@ async def safe_fetch(
             await client.aclose()
 
 
-def _parse_response_data(response: httpx.Response) -> Any:
-    """Try JSON parse; fall back to truncated raw text."""
+def _parse_text_data(text: str) -> Any:
+    """Try JSON parse on decoded text; fall back to truncated raw text."""
+    import json as _json
+
     try:
-        return response.json()
+        return _json.loads(text)
     except (ValueError, TypeError):
-        return {"raw_text": response.text[:500]}
+        return {"raw_text": text[:500]}
 
 
 def _now_ms() -> int:

@@ -134,18 +134,22 @@ class TestSuccessfulFetch:
 @pytest.mark.verification
 class TestResponseSizeLimit:
     async def test_rejects_body_exceeding_max(self) -> None:
-        """Oversized streamed body returns FetchResult(ok=False) with sizes in error."""
+        """Oversized body returns FetchResult(ok=False) with sizes in error.
 
-        class ChunkedResp:
+        safe_fetch now calls response.aread() (not aiter_bytes) inside the
+        stream context so the mock must implement aread() returning the full
+        oversized bytes.
+        """
+
+        class BigResp:
             status_code = 200
             headers = httpx.Headers({"content-type": "text/plain"})
             request = httpx.Request("GET", "https://example.com/huge")
 
-            async def aiter_bytes(self):
-                yield b"x" * 50
-                yield b"y" * 60  # total 110 > limit 100
+            async def aread(self) -> bytes:  # called by safe_fetch for decompressed body
+                return b"x" * 110  # total 110 > limit 100
 
-        mock_resp = ChunkedResp()
+        mock_resp = BigResp()
 
         with patch("strata_harvest.utils.http.httpx.AsyncClient") as mock_client:
             instance = AsyncMock()

@@ -1,0 +1,29 @@
+# .pre-commit-config.yaml
+# Install once after git clone:
+#   uv pip install pre-commit && pre-commit install
+#
+# PATH note: hooks run in a non-interactive shell where ~/.zshrc is not sourced,
+# so uv may not be on PATH. We inject the common install locations explicitly.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: Ruff lint (fix + check)
+        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run ruff check --fix . && PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run ruff check .'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: ruff-format
+        name: Ruff format check
+        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run ruff format --check .'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: mypy
+        name: mypy strict
+        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run mypy src/'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

@@ -119,6 +119,11 @@ class LeverParser(BaseParser):
     def build_api_url(url: str) -> str:
         """Convert a Lever career-page or API URL to the JSON API endpoint.
 
+        Extracts only the company board slug (first non-empty path segment) so
+        that job-detail URLs like ``jobs.lever.co/acme/abc123`` are normalised
+        to ``api.lever.co/v0/postings/acme?mode=json`` rather than appending
+        the full path (which always 404s on the postings API).
+
         Handles both global (``jobs.lever.co``) and EU (``jobs.eu.lever.co``)
         instances. Already-correct API URLs are returned as-is (with
         ``mode=json`` appended if missing).
@@ -130,12 +135,16 @@ class LeverParser(BaseParser):
             return url
 
         parsed = urlparse(url)
-        path = parsed.path.rstrip("/")
+        # Use only the first path segment — the company board slug.
+        # Stored URLs may contain job IDs or sub-paths beyond the slug;
+        # the Lever postings API only accepts the slug as the path component.
+        parts = [p for p in parsed.path.strip("/").split("/") if p]
+        slug = parts[0] if parts else parsed.netloc.split(".")[0]
 
         if "eu.lever.co" in parsed.netloc:
-            return f"https://api.eu.lever.co/v0/postings{path}?mode=json"
+            return f"https://api.eu.lever.co/v0/postings/{slug}?mode=json"
 
-        return f"https://api.lever.co/v0/postings{path}?mode=json"
+        return f"https://api.lever.co/v0/postings/{slug}?mode=json"
 
     # ------------------------------------------------------------------
     # Internal parsing helpers
