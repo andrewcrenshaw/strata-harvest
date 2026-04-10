@@ -1,6 +1,6 @@
 [project]
 name = "strata-harvest"
-version = "0.1.2"
+version = "0.1.4"
 description = "Career page scraping and ATS parsing library for job search automation"
 readme = "README.md"
 requires-python = ">=3.11"

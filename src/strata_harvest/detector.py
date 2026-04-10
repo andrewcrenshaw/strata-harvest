@@ -30,6 +30,16 @@ _URL_PATTERNS: list[tuple[re.Pattern[str], ATSProvider, str | None]] = [
     (re.compile(r"jobs\.ashbyhq\.com|ashby\.io"), ATSProvider.ASHBY, None),
     (re.compile(r"\.myworkdayjobs\.com|workday\.com"), ATSProvider.WORKDAY, None),
     (re.compile(r"\.icims\.com|icims\.com"), ATSProvider.ICIMS, None),
+    (re.compile(r"ats\.rippling\.com", re.I), ATSProvider.RIPPLING, None),
+    (re.compile(r"\.workable\.com", re.I), ATSProvider.WORKABLE, None),
+    (re.compile(r"\.bamboohr\.com/careers", re.I), ATSProvider.BAMBOOHR, None),
+    (
+        re.compile(r"jobs\.smartrecruiters\.com", re.I),
+        ATSProvider.SMARTRECRUITERS,
+        "https://api.smartrecruiters.com/v1/companies/{board}/postings",
+    ),
+    (re.compile(r"jobs\.personio\.de", re.I), ATSProvider.PERSONIO, None),
+    (re.compile(r"jobs\.jobvite\.com", re.I), ATSProvider.JOBVITE, None),
 ]
 
 _DOM_SIGNATURES: list[tuple[re.Pattern[str], ATSProvider, float]] = [
@@ -38,6 +48,16 @@ _DOM_SIGNATURES: list[tuple[re.Pattern[str], ATSProvider, float]] = [
     (re.compile(r"ashby-job-posting|ashbyhq\.com", re.I), ATSProvider.ASHBY, 0.80),
     (re.compile(r"myworkdayjobs\.com|workday", re.I), ATSProvider.WORKDAY, 0.70),
     (re.compile(r"icims\.com|class=['\"]iCIMS", re.I), ATSProvider.ICIMS, 0.75),
+    (re.compile(r"ats\.rippling\.com|rippling-ats", re.I), ATSProvider.RIPPLING, 0.85),
+    (re.compile(r"\.workable\.com|workable-board", re.I), ATSProvider.WORKABLE, 0.85),
+    (re.compile(r"bamboohr\.com/careers|bamboohr-app", re.I), ATSProvider.BAMBOOHR, 0.85),
+    (
+        re.compile(r"smartrecruiters\.com|smartrecruiters-app", re.I),
+        ATSProvider.SMARTRECRUITERS,
+        0.85,
+    ),
+    (re.compile(r"personio\.de|personio\.com|personio-", re.I), ATSProvider.PERSONIO, 0.85),
+    (re.compile(r"jobvite\.com|jobvite-", re.I), ATSProvider.JOBVITE, 0.85),
 ]
 
 

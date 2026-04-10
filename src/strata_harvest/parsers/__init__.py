@@ -6,6 +6,7 @@ from strata_harvest.parsers.greenhouse import GreenhouseParser
 from strata_harvest.parsers.icims import ICIMSParser
 from strata_harvest.parsers.lever import LeverParser
 from strata_harvest.parsers.llm_fallback import LLMFallbackParser
+from strata_harvest.parsers.smartrecruiters import SmartRecruitersParser
 from strata_harvest.parsers.workday import WorkdayParser
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "ICIMSParser",
     "LeverParser",
     "LLMFallbackParser",
+    "SmartRecruitersParser",
     "WorkdayParser",
 ]

@@ -26,6 +26,13 @@ class ATSProvider(StrEnum):
     ASHBY = "ashby"
     WORKDAY = "workday"
     ICIMS = "icims"
+    RIPPLING = "rippling"
+    WORKABLE = "workable"
+    BAMBOOHR = "bamboohr"
+    SMARTRECRUITERS = "smartrecruiters"
+    PERSONIO = "personio"
+    JOBVITE = "jobvite"
+    GENERIC = "generic"
     UNKNOWN = "unknown"
 
 

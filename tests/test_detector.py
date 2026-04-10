@@ -101,6 +101,33 @@ class TestURLPatternMatching:
         assert info.provider == ATSProvider.UNKNOWN
         assert info.confidence == 0.0
 
+    def test_rippling(self) -> None:
+        info = detect_from_url("https://ats.rippling.com/company/jobs")
+        assert info.provider == ATSProvider.RIPPLING
+
+    def test_workable(self) -> None:
+        info = detect_from_url("https://company.workable.com/")
+        assert info.provider == ATSProvider.WORKABLE
+
+    def test_bamboohr(self) -> None:
+        info = detect_from_url("https://company.bamboohr.com/careers")
+        assert info.provider == ATSProvider.BAMBOOHR
+
+    def test_smartrecruiters(self) -> None:
+        info = detect_from_url("https://jobs.smartrecruiters.com/company")
+        assert info.provider == ATSProvider.SMARTRECRUITERS
+
+    def test_personio(self) -> None:
+        info = detect_from_url("https://jobs.personio.de/company")
+        assert info.provider == ATSProvider.PERSONIO
+
+    def test_jobvite(self) -> None:
+        info = detect_from_url("https://jobs.jobvite.com/company")
+        assert info.provider == ATSProvider.JOBVITE
+        info = detect_from_url("https://example.com/careers")
+        assert info.provider == ATSProvider.UNKNOWN
+        assert info.confidence == 0.0
+
     def test_no_false_positive_on_substring(self) -> None:
         info = detect_from_url("https://example.com/greenhouse-supplies")
         assert info.provider == ATSProvider.UNKNOWN
@@ -143,6 +170,36 @@ class TestDOMProbing:
         html = _load_fixture("unknown_custom.html")
         info = detect_from_dom(html)
         assert info.provider == ATSProvider.UNKNOWN
+
+    def test_rippling_dom(self) -> None:
+        html = '<script src="ats.rippling.com/js"></script>'
+        info = detect_from_dom(html)
+        assert info.provider == ATSProvider.RIPPLING
+
+    def test_workable_dom(self) -> None:
+        html = '<div id="workable-board"></div>'
+        info = detect_from_dom(html)
+        assert info.provider == ATSProvider.WORKABLE
+
+    def test_bamboohr_dom(self) -> None:
+        html = '<div id="bamboohr-app"></div>'
+        info = detect_from_dom(html)
+        assert info.provider == ATSProvider.BAMBOOHR
+
+    def test_smartrecruiters_dom(self) -> None:
+        html = '<script src="smartrecruiters-app.js"></script>'
+        info = detect_from_dom(html)
+        assert info.provider == ATSProvider.SMARTRECRUITERS
+
+    def test_personio_dom(self) -> None:
+        html = '<div class="personio-jobs"></div>'
+        info = detect_from_dom(html)
+        assert info.provider == ATSProvider.PERSONIO
+
+    def test_jobvite_dom(self) -> None:
+        html = '<div class="jobvite-container"></div>'
+        info = detect_from_dom(html)
+        assert info.provider == ATSProvider.JOBVITE
 
     def test_empty_html(self) -> None:
         info = detect_from_dom("")
