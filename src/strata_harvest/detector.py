@@ -20,7 +20,7 @@ _URL_PATTERNS: list[tuple[re.Pattern[str], ATSProvider, str | None]] = [
     (
         re.compile(r"boards\.greenhouse\.io|greenhouse\.io/embed"),
         ATSProvider.GREENHOUSE,
-        "https://boards-api.greenhouse.io/v1/boards/{board}/jobs",
+        "https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true",
     ),
     (
         re.compile(r"jobs\.lever\.co"),

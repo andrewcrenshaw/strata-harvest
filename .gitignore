@@ -41,3 +41,9 @@ coverage.xml
 
 # Agent runtime data (not source code)
 .agent-data/
+
+# Playwright browser cache (crawl4ai downloads to ~/.playwright or
+# ~/Library/Caches/ms-playwright — excluded here as a belt-and-suspenders guard
+# in case a future crawl4ai release places binaries in-tree)
+.playwright/
+playwright-cache/

@@ -211,7 +211,7 @@ class Crawler:
                 ),
             )
 
-        if not result.ok:
+        if not result.ok and ats_info.provider != ATSProvider.UNKNOWN:
             return ScrapeResult(
                 url=url,
                 ats_info=ats_info,
@@ -297,6 +297,30 @@ class Crawler:
                 jobs = await parser.parse_async(html_content, url=url)
             else:
                 jobs = parser.parse(html_content, url=url)
+
+        # Phase 3 Fallback: Crawl4AI for UNKNOWN / SPA pages
+        if ats_info.provider == ATSProvider.UNKNOWN and (
+            not fetch_result.ok or not html_content.strip() or len(jobs) < 5
+        ):
+            from strata_harvest.parsers.crawl4ai_extractor import (
+                _CRAWL4AI_AVAILABLE,
+                Crawl4AIExtractor,
+            )
+
+            if _CRAWL4AI_AVAILABLE:
+                logger.info("Triggering Crawl4AI fallback for %s", url)
+                extractor = Crawl4AIExtractor()
+                c4_jobs = await extractor.extract(url)
+                if c4_jobs:
+                    jobs = c4_jobs
+
+        if not jobs and not fetch_result.ok:
+            return ScrapeResult(
+                url=url,
+                ats_info=ats_info,
+                error=fetch_result.error or f"HTTP {fetch_result.status_code}",
+                scrape_duration_ms=fetch_result.elapsed_ms,
+            )
 
         return ScrapeResult(
             url=url,

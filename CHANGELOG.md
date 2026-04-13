@@ -7,15 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-04-10
+
 ### Added
 
-- **Ashby tenant slug resolver** (ENH-04 / PCC-1736): Ashby-hosted career pages on
-  custom domains (e.g. Granola AI, Notion, Loom, Retool) now return >0 jobs.
-  `AshbyParser.extract_slug_from_html()` scans the fetched HTML for the
-  `organizationHostedJobsPageName` JSON config key (primary) or an
-  `ashbyhq.com/job-board/<slug>` URL (fallback), then queries the Ashby GraphQL
-  API with the resolved slug.  When no slug can be found a warning is logged and
-  an empty result is returned (unchanged prior behaviour).
+- **Exa AI discovery module** (`strata_harvest.discovery.exa_discovery`, PCC-1807):
+  New `async find_career_page(company_name, *, exa_api_key)` function that queries
+  Exa's semantic search for a company's current career page URL, scoring results by
+  ATS signal strength (Greenhouse, Lever, Ashby, SmartRecruiters, etc.) and
+  returning the highest-confidence URL above a configurable threshold.
+  Activated via the new `exa` optional extra: `pip install strata-harvest[exa]`.
+- **`exa` optional dependency**: `exa-py>=1.0` added to `pyproject.toml`
+  `[project.optional-dependencies]`.
+
 
 ## [0.1.1] - 2026-03-30
 

@@ -18,7 +18,7 @@ from typing import Any
 try:
     import litellm
 except ImportError:  # pragma: no cover - base install without ``[llm]`` extra
-    litellm = None  # type: ignore[assignment]
+    litellm = None
 
 from strata_harvest.models import ATSProvider, JobListing
 from strata_harvest.parsers.base import BaseParser
