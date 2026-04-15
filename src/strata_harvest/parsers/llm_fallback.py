@@ -25,7 +25,7 @@ from strata_harvest.parsers.base import BaseParser
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "gemini/gemini-2.0-flash"
+DEFAULT_MODEL = "gemini/gemini-2.5-flash"
 
 _SCRIPT_STYLE_RE = re.compile(
     r"<(script|style|noscript)[^>]*>.*?</\1>",

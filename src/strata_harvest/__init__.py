@@ -17,7 +17,7 @@ from __future__ import annotations
 from strata_harvest.crawler import create_crawler, harvest
 from strata_harvest.models import ATSInfo, JobListing, ScrapeResult
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 __all__ = [
     "ATSInfo",

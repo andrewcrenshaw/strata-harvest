@@ -207,7 +207,7 @@ class Crawler:
                 error=(
                     f"{provider_name} parser is not yet implemented. "
                     f"Configure llm_provider to use LLM extraction: "
-                    f"create_crawler(llm_provider='gemini/gemini-2.0-flash')"
+                    f"create_crawler(llm_provider='gemini/gemini-2.5-flash')"
                 ),
             )
 
@@ -281,16 +281,14 @@ class Crawler:
                     logger.warning("OCR failed for %s: %s", url, ocr_result.error)
                 jobs = []
         else:
-            # ENH-04 / PCC-1736: For Ashby pages detected from DOM (custom domain,
-            # api_url=None, detection_method="dom_probe"), html_content is a career
-            # page that embeds Ashby — not a GraphQL JSON response.  Extract the org
-            # slug from HTML and query the GraphQL API directly.
-            if (
-                ats_info.provider == ATSProvider.ASHBY
-                and ats_info.detection_method == "dom_probe"
-                and isinstance(parser, AshbyParser)
-            ):
-                jobs = await AshbyParser.fetch_all(url, html=html_content)
+            # ENH-04 / PCC-1736: For Ashby pages, the parser expects GraphQL
+            # JSON but the initial fetch returns HTML.  Query the GraphQL API
+            # directly.  For DOM-probe detections (custom domain), extract the
+            # org slug from HTML; for URL-pattern detections (ashbyhq.com),
+            # extract the slug from the URL.
+            if ats_info.provider == ATSProvider.ASHBY and isinstance(parser, AshbyParser):
+                html_for_slug = html_content if ats_info.detection_method == "dom_probe" else None
+                jobs = await AshbyParser.fetch_all(url, html=html_for_slug)
             # LLM extraction is synchronous in litellm; run it in a thread so the
             # asyncio event loop stays responsive under concurrent scrapes (PCC-1606).
             elif isinstance(parser, LLMFallbackParser):
@@ -298,10 +296,15 @@ class Crawler:
             else:
                 jobs = parser.parse(html_content, url=url)
 
-        # Phase 3 Fallback: Crawl4AI for UNKNOWN / SPA pages
-        if ats_info.provider == ATSProvider.UNKNOWN and (
-            not fetch_result.ok or not html_content.strip() or len(jobs) < 5
-        ):
+        # Phase 3 Fallback: Crawl4AI for UNKNOWN / SPA pages.
+        # Also covers known SPA-rendered ATS providers (e.g. Rippling) where the
+        # initial LLM fallback returned 0 results — the page requires JS execution.
+        spa_providers: frozenset[ATSProvider] = frozenset((ATSProvider.RIPPLING,))
+        _crawl4ai_trigger = (
+            ats_info.provider == ATSProvider.UNKNOWN
+            and (not fetch_result.ok or not html_content.strip() or len(jobs) < 5)
+        ) or (ats_info.provider in spa_providers and len(jobs) == 0)
+        if _crawl4ai_trigger:
             from strata_harvest.parsers.crawl4ai_extractor import (
                 _CRAWL4AI_AVAILABLE,
                 Crawl4AIExtractor,
