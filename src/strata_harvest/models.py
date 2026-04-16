@@ -32,6 +32,13 @@ class ATSProvider(StrEnum):
     SMARTRECRUITERS = "smartrecruiters"
     PERSONIO = "personio"
     JOBVITE = "jobvite"
+    TEAMTAILOR = "teamtailor"
+    RECRUITEE = "recruitee"
+    PINPOINT = "pinpoint"
+    BREEZY = "breezy"
+    PHENOM = "phenom"
+    EIGHTFOLD = "eightfold"
+    SAP_SUCCESSFACTORS = "sap_successfactors"
     GENERIC = "generic"
     UNKNOWN = "unknown"
 
@@ -125,6 +132,8 @@ class FetchResult(BaseModel):
     data: Any = None
     error: str | None = None
     elapsed_ms: float = 0.0
+    etag: str | None = None
+    last_modified: str | None = None
 
     @property
     def ok(self) -> bool:

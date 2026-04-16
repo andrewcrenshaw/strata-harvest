@@ -54,6 +54,13 @@ exa = [
 browser = [
     "crawl4ai>=0.4",
 ]
+extract = [
+    "extruct>=0.16",
+]
+stealth = [
+    "scrapling>=0.3.2",
+    "curl_cffi>=0.7",
+]
 
 [project.urls]
 Homepage = "https://github.com/andrewcrenshaw/strata-harvest"
@@ -92,6 +99,26 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "crawl4ai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "extruct"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "scrapling"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "scrapling.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "curl_cffi"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "curl_cffi.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

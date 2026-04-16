@@ -19,15 +19,12 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from strata_harvest.models import ATSProvider, JobListing
+from strata_harvest.parsers._structured_data import extract_structured_data, salary_to_string
 from strata_harvest.parsers.base import BaseParser
 
 logger = logging.getLogger(__name__)
 
-_JSON_LD_PATTERN = re.compile(
-    r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
-    re.DOTALL | re.IGNORECASE,
-)
-_TAG_PATTERN = re.compile(r"<[^>]+>")
+_TAG_PATTERN = re.compile(r"<[^>]+")
 
 # iCIMS job link pattern — /jobs/{id}/job or /iims/hrd.aspx?
 _ICIMS_JOB_LINK_PATTERN = re.compile(
@@ -153,29 +150,22 @@ class ICIMSParser(BaseParser):
             return None
 
     # ------------------------------------------------------------------
-    # Strategy 2: JSON-LD
+    # Strategy 2: JSON-LD (via extruct or regex fallback)
     # ------------------------------------------------------------------
 
     def _parse_json_ld(self, html: str, *, base_url: str) -> list[JobListing]:
-        """Extract JobPosting items from JSON-LD script blocks."""
+        """Extract JobPosting items using the shared structured-data helper.
+
+        Uses extruct when installed (``pip install strata-harvest[extract]``)
+        for robust handling of HTML-entity-escaped content, nested scripts, and
+        malformed whitespace.  Falls back to regex + ``json.loads`` otherwise.
+        """
+        structured = extract_structured_data(html, base_url=base_url)
         listings: list[JobListing] = []
-        for match in _JSON_LD_PATTERN.finditer(html):
-            raw = match.group(1).strip()
-            try:
-                data = json.loads(raw)
-            except (json.JSONDecodeError, ValueError):
-                continue
-
-            items = data if isinstance(data, list) else [data]
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                if item.get("@type") != "JobPosting":
-                    continue
-                listing = self._json_ld_to_listing(item, base_url=base_url)
-                if listing:
-                    listings.append(listing)
-
+        for item in structured.job_postings:
+            listing = self._json_ld_to_listing(item, base_url=base_url)
+            if listing:
+                listings.append(listing)
         return listings
 
     def _json_ld_to_listing(self, item: dict[str, Any], *, base_url: str) -> JobListing | None:
@@ -188,9 +178,13 @@ class ICIMSParser(BaseParser):
         if job_url and not str(job_url).startswith("http"):
             job_url = urljoin(base_url, str(job_url))
 
+        # Location: prefer jobLocationType=TELECOMMUTE → "Remote"
+        job_location_type = item.get("jobLocationType")
         location_obj = item.get("jobLocation")
         location = None
-        if isinstance(location_obj, dict):
+        if job_location_type and str(job_location_type).upper() == "TELECOMMUTE":
+            location = "Remote"
+        elif isinstance(location_obj, dict):
             addr = location_obj.get("address")
             if isinstance(addr, dict):
                 parts = [
@@ -207,12 +201,17 @@ class ICIMSParser(BaseParser):
         description_raw = item.get("description") or ""
         description = _TAG_PATTERN.sub("", description_raw).strip() or None
 
+        employment_type = item.get("employmentType") or None
+        salary_range = salary_to_string(item.get("baseSalary"))
+
         try:
             return JobListing(
                 title=str(title),
                 url=str(job_url),
                 location=location,
                 description=description,
+                employment_type=str(employment_type) if employment_type else None,
+                salary_range=salary_range,
                 ats_provider=ATSProvider.ICIMS,
                 raw_data=item,
             )

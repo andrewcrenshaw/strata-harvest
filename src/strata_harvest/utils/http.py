@@ -102,6 +102,9 @@ async def safe_fetch(
     client: httpx.AsyncClient | None = None,
     allow_private: bool = False,
     max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+    if_none_match: str | None = None,
+    if_modified_since: str | None = None,
+    cached_content: str | None = None,
 ) -> FetchResult:
     """Fetch a URL with timeout, retries, and structured error return.
 
@@ -122,6 +125,12 @@ async def safe_fetch(
     content-encoding (gzip, brotli, zstd) transparently. If the decoded body
     exceeds *max_response_bytes* (default 10 MiB), the fetch fails with a
     structured error rather than retaining the oversized payload.
+
+    Supports conditional requests:
+    - *if_none_match*: ETag value to use in If-None-Match header
+    - *if_modified_since*: Timestamp to use in If-Modified-Since header
+    - *cached_content*: When both headers are provided and server returns 304,
+      this content is returned in FetchResult (with 304 status code)
     """
     block = await _ssrf_block_reason(url, allow_private)
     if block:
@@ -130,6 +139,12 @@ async def safe_fetch(
     merged_headers = {"User-Agent": DEFAULT_USER_AGENT}
     if headers:
         merged_headers.update(headers)
+
+    # Add conditional request headers if provided
+    if if_none_match:
+        merged_headers["If-None-Match"] = if_none_match
+    if if_modified_since:
+        merged_headers["If-Modified-Since"] = if_modified_since
 
     last_error: str | None = None
     owns_client = client is None
@@ -158,6 +173,18 @@ async def safe_fetch(
                     content=body,
                 ) as response:
                     duration = _now_ms() - start_ms
+
+                    # Handle 304 Not Modified: return cached content with headers
+                    if response.status_code == 304:
+                        return FetchResult(
+                            url=url,
+                            status_code=304,
+                            content=cached_content,
+                            content_type=response.headers.get("content-type"),
+                            etag=response.headers.get("etag"),
+                            last_modified=response.headers.get("last-modified"),
+                            elapsed_ms=duration,
+                        )
 
                     if response.status_code >= 400:
                         error_body = await _read_error_body_limited(response, 200)
@@ -214,6 +241,8 @@ async def safe_fetch(
                         content=text,
                         content_type=response.headers.get("content-type"),
                         data=data,
+                        etag=response.headers.get("etag"),
+                        last_modified=response.headers.get("last-modified"),
                         elapsed_ms=duration,
                     )
 

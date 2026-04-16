@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import httpx
 
 from strata_harvest.detector import detect_ats, detect_from_url
-from strata_harvest.models import ATSProvider, JobListing, ScrapeResult
+from strata_harvest.models import ATSProvider, FetchResult, JobListing, ScrapeResult
 from strata_harvest.parsers.ashby import AshbyParser
 from strata_harvest.parsers.base import BaseParser
 from strata_harvest.parsers.llm_fallback import LLMFallbackParser
@@ -25,6 +25,7 @@ from strata_harvest.utils.hashing import content_hash
 from strata_harvest.utils.http import safe_fetch
 from strata_harvest.utils.rate_limiter import PerDomainRateLimiterRegistry, RateLimiter
 from strata_harvest.utils.robots import RobotsTxtChecker
+from strata_harvest.validator.careers_page import CareersPageValidator
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,74 @@ _DEFAULT_PER_DOMAIN_RATE: float = 0.5  # requests per second per hostname
 _DEFAULT_PER_DOMAIN_IDLE_TTL: float = 3600.0  # drop idle per-domain limiters after 1h
 _DEFAULT_TIMEOUT: float = 30.0
 _DEFAULT_CONCURRENCY: int = 5
+_DEFAULT_IMPERSONATION_TARGET: str = "chrome124"
+
+# Cloudflare / generic bot-challenge body markers (lowercase).
+_BOT_CHALLENGE_BODY_MARKERS: tuple[str, ...] = (
+    "_cf_chl_opt",
+    "cf-browser-verification",
+    "just a moment",
+    "checking your browser",
+)
+
+
+def _bot_challenge_reason(result: FetchResult) -> str | None:
+    """Return a reason code if *result* looks like a bot-challenge page, else None.
+
+    Used by the tier-1→tier-2 escalation path to decide whether to retry
+    the fetch using curl_cffi browser impersonation.
+
+    Reason codes
+    ------------
+    ``"http_403"``
+        Server returned HTTP 403 Forbidden.
+    ``"cloudflare_challenge_body"``
+        Response body contains Cloudflare JS-challenge markers.
+    """
+    if result.status_code == 403:
+        return "http_403"
+    if result.content:
+        lc = result.content.lower()
+        if any(m in lc for m in _BOT_CHALLENGE_BODY_MARKERS):
+            return "cloudflare_challenge_body"
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 escalation helpers (PCC-1947)
+# ---------------------------------------------------------------------------
+
+# Minimum stripped-text length before a 200 response is treated as "empty"
+# and escalated to tier-3 StealthyFetcher.
+_TIER3_EMPTY_BODY_THRESHOLD: int = 200
+
+# Reason codes emitted in the scrape audit log on tier-3 escalation.
+_TIER3_REASON_403 = "TIER3_403"
+_TIER3_REASON_CLOUDFLARE = "TIER3_CLOUDFLARE"
+_TIER3_REASON_EMPTY_200 = "TIER3_EMPTY_200"
+
+
+def _tier3_escalation_reason(result: FetchResult) -> str | None:
+    """Return a tier-3 reason code when *result* warrants StealthyFetcher escalation.
+
+    Checks (in order):
+
+    1. HTTP 403 → ``"TIER3_403"``
+    2. Cloudflare JS-challenge body → ``"TIER3_CLOUDFLARE"``
+    3. HTTP 200 with near-empty body → ``"TIER3_EMPTY_200"``
+
+    Returns ``None`` when no escalation is warranted.
+    """
+    if result.status_code == 403:
+        return _TIER3_REASON_403
+    content = result.content or ""
+    lc = content.lower()
+    if "cloudflare" in lc and any(m in lc for m in _BOT_CHALLENGE_BODY_MARKERS):
+        return _TIER3_REASON_CLOUDFLARE
+    stripped = re.sub(r"<[^>]+>", " ", content).strip()
+    if result.status_code == 200 and len(stripped) < _TIER3_EMPTY_BODY_THRESHOLD:
+        return _TIER3_REASON_EMPTY_200
+    return None
 
 
 class Crawler:
@@ -81,6 +150,10 @@ class Crawler:
         non-API ATS paths. Greenhouse, Lever, and Ashby (URL-detected) skip this check.
     robots_cache_ttl:
         Seconds to cache parsed ``robots.txt`` per origin (default one hour).
+    impersonation_target:
+        curl_cffi browser profile used for tier-2 escalation when tier-1 hits a
+        bot-challenge (403 or Cloudflare JS-challenge body).  Default ``chrome124``.
+        Requires the ``[stealth]`` extra; has no effect when curl_cffi is not installed.
     """
 
     def __init__(
@@ -99,6 +172,7 @@ class Crawler:
         respect_robots: bool = True,
         robots_cache_ttl: float = 3600.0,
         ocr_router: OcrRouter | None = None,
+        impersonation_target: str = _DEFAULT_IMPERSONATION_TARGET,
     ) -> None:
         self._global_rate_limiter = RateLimiter(requests_per_second=rate_limit)
         self._per_domain_registry = PerDomainRateLimiterRegistry(
@@ -118,6 +192,12 @@ class Crawler:
             user_agent=user_agent,
         )
         self._ocr_router = ocr_router
+        self._page_validator = CareersPageValidator()
+        self._impersonation_target = impersonation_target
+        # Sitemap discovery and caching for incremental crawling
+        from strata_harvest.utils.sitemap import SitemapFinder  # noqa: PLC0415
+
+        self._sitemap_finder = SitemapFinder(ttl_seconds=robots_cache_ttl)
 
     async def _acquire_rate_limits(self, url: str) -> None:
         """Apply global and per-hostname rate limits (global is the upper bound)."""
@@ -125,11 +205,46 @@ class Crawler:
         hostname = urlparse(url).hostname or ""
         await self._per_domain_registry.acquire(hostname)
 
-    async def scrape(self, url: str, *, previous_hash: str | None = None) -> ScrapeResult:
+    async def discover_job_urls_from_sitemap(self, page_url: str) -> list[str]:
+        """Discover job URLs for a domain via sitemap discovery.
+
+        Attempts to find and parse /sitemap.xml, /sitemap_index.xml, and /sitemal.xml
+        (SAP SuccessFactors quirk) for the domain. Recursively handles sitemap index files.
+
+        Returns an empty list if no sitemap is found or the domain cannot be parsed.
+
+        Parameters
+        ----------
+        page_url:
+            Career page or job-board URL (domain is extracted from this).
+
+        Returns
+        -------
+        list[str]
+            Job URLs discovered from sitemaps (in order of appearance).
+        """
+        entries = await self._sitemap_finder.find_job_urls(
+            page_url,
+            timeout=self._timeout,
+            allow_private=self._allow_private,
+        )
+        return [entry.url for entry in entries]
+
+    async def scrape(
+        self,
+        url: str,
+        *,
+        previous_hash: str | None = None,
+        previous_etag: str | None = None,
+        previous_lastmod: str | None = None,
+    ) -> ScrapeResult:
         """Scrape a career page and return structured results.
 
         Detects the ATS, fetches HTML, parses listings, and computes a content
         hash for change detection when *previous_hash* is supplied.
+
+        Supports conditional requests via *previous_etag* and *previous_lastmod*
+        to avoid redundant fetches when content hasn't changed (HTTP 304 Not Modified).
 
         Parameters
         ----------
@@ -138,6 +253,11 @@ class Crawler:
         previous_hash:
             If set, compared to the new content hash to populate
             :attr:`ScrapeResult.changed`.
+        previous_etag:
+            ETag from a prior fetch; used in If-None-Match header for conditional requests.
+        previous_lastmod:
+            Last-Modified timestamp from a prior fetch or sitemap; used in
+            If-Modified-Since header for conditional requests.
 
         Returns
         -------
@@ -184,12 +304,106 @@ class Crawler:
                 )
 
         fetch_headers = {"User-Agent": self._user_agent} if self._user_agent else None
+
+        # Handle 304 Not Modified by using cached content if available
+        # This requires both the conditional headers AND the cached content to be passed
         result = await safe_fetch(
             url,
             timeout=self._timeout,
             headers=fetch_headers,
             allow_private=self._allow_private,
+            if_none_match=previous_etag,
+            if_modified_since=previous_lastmod,
+            cached_content=None,  # We don't have cached content at this level
         )
+
+        # --- Handle 304 Not Modified (PCC-1954) ---
+        # When conditional request headers were provided and the server returned 304,
+        # it means the content hasn't changed. Return early with no jobs parsed.
+        if result.status_code == 304:
+            logger.info(
+                "Content unchanged for %s (304 Not Modified) — skipping parse",
+                url,
+            )
+            return ScrapeResult(
+                url=url,
+                ats_info=url_hint,
+                content_hash=None,  # No content available for hash
+                changed=False,  # Explicitly unchanged
+                scrape_duration_ms=result.elapsed_ms,
+                fetch_ok=True,
+            )
+
+        # --- Tier-2 escalation: curl_cffi impersonation (PCC-1948) ---
+        # When tier-1 (httpx) is blocked by a bot-challenge (HTTP 403 or a
+        # Cloudflare JS-challenge body), retry with curl_cffi browser
+        # impersonation before falling through to tier-3 (crawl4ai).
+        _t2_reason = _bot_challenge_reason(result)
+        if _t2_reason:
+            from strata_harvest.utils.impersonating_fetcher import (  # noqa: PLC0415
+                _CURL_CFFI_AVAILABLE,
+            )
+            from strata_harvest.utils.impersonating_fetcher import (
+                safe_fetch as _impersonating_safe_fetch,
+            )
+
+            if _CURL_CFFI_AVAILABLE:
+                logger.info(
+                    "Tier escalation tier-1→tier-2 [%s]: %s (impersonate=%s)",
+                    _t2_reason,
+                    url,
+                    self._impersonation_target,
+                )
+                tier2_result = await _impersonating_safe_fetch(
+                    url,
+                    timeout=self._timeout,
+                    headers=fetch_headers,
+                    impersonate=self._impersonation_target,
+                    allow_private=self._allow_private,
+                )
+                if tier2_result.ok:
+                    result = tier2_result
+            else:
+                logger.debug(
+                    "curl_cffi not available; skipping tier-2 escalation for %s", url
+                )
+
+        # --- Tier-3 escalation: scrapling StealthyFetcher (PCC-1947) ---
+        # Promote to tier 3 when the result (post tier-2) still indicates bot-blocking
+        # or an empty page.  Skipped for API-native ATS providers (Greenhouse, Lever,
+        # Ashby) that use direct API endpoints and don't need browser rendering.
+        # Every escalation emits a structured log entry with the reason code so that
+        # the scrape audit trail remains queryable.
+        if url_hint.provider not in _ROBOTS_BYPASS_PROVIDERS:
+            _t3_reason = _tier3_escalation_reason(result)
+            if _t3_reason:
+                from strata_harvest.utils.stealth_fetcher import (  # noqa: PLC0415
+                    _SCRAPLING_AVAILABLE,
+                    StealthFetcher,
+                )
+
+                if _SCRAPLING_AVAILABLE:
+                    logger.info(
+                        "Tier escalation tier-2→tier-3 [%s]: %s",
+                        _t3_reason,
+                        url,
+                    )
+                    tier3_result = await StealthFetcher(timeout=int(self._timeout)).fetch(url)
+                    if tier3_result.ok:
+                        logger.info("Tier-3 StealthyFetcher succeeded for %s", url)
+                        result = tier3_result
+                    else:
+                        logger.warning(
+                            "Tier-3 StealthyFetcher failed for %s: %s",
+                            url,
+                            tier3_result.error,
+                        )
+                else:
+                    logger.debug(
+                        "scrapling not available; skipping tier-3 escalation for %s [%s]",
+                        url,
+                        _t3_reason,
+                    )
 
         ats_info = await detect_ats(
             url,
@@ -198,6 +412,38 @@ class Crawler:
             user_agent=self._user_agent,
             allow_private=self._allow_private,
         )
+
+        # --- Pre-harvest validation (PCC-1946) ---
+        # Reject wrong-page false-positives before any parsing work begins.
+        # Passes ats_info so detected ATS providers short-circuit as valid.
+        validation = self._page_validator.validate(
+            url,
+            result.content or "",
+            ats_info=ats_info,
+        )
+        if not validation.is_valid:
+            logger.info(
+                "CareersPageValidator rejected %s [%s]: %s",
+                url,
+                validation.reason_code,
+                validation.reject_reason,
+            )
+            return ScrapeResult(
+                url=url,
+                ats_info=ats_info,
+                error=(
+                    f"Page rejected by validator [{validation.reason_code}]: "
+                    f"{validation.reject_reason}"
+                ),
+                scrape_duration_ms=result.elapsed_ms,
+                fetch_ok=result.ok,
+            )
+        if validation.suspect:
+            logger.warning(
+                "CareersPageValidator: %s is suspect [%s] — consider Exa heal",
+                url,
+                validation.reason_code,
+            )
 
         if BaseParser.is_stub_provider(ats_info.provider) and not self._llm_provider:
             provider_name = ats_info.provider.value.title()
@@ -297,13 +543,12 @@ class Crawler:
                 jobs = parser.parse(html_content, url=url)
 
         # Phase 3 Fallback: Crawl4AI for UNKNOWN / SPA pages.
-        # Also covers known SPA-rendered ATS providers (e.g. Rippling) where the
-        # initial LLM fallback returned 0 results — the page requires JS execution.
-        spa_providers: frozenset[ATSProvider] = frozenset((ATSProvider.RIPPLING,))
+        # Rippling is handled by RipplingParser via __NEXT_DATA__ extraction and
+        # no longer requires JS execution — removed from spa_providers.
         _crawl4ai_trigger = (
             ats_info.provider == ATSProvider.UNKNOWN
             and (not fetch_result.ok or not html_content.strip() or len(jobs) < 5)
-        ) or (ats_info.provider in spa_providers and len(jobs) == 0)
+        )
         if _crawl4ai_trigger:
             from strata_harvest.parsers.crawl4ai_extractor import (
                 _CRAWL4AI_AVAILABLE,
@@ -415,6 +660,7 @@ def create_crawler(
     respect_robots: bool = True,
     robots_cache_ttl: float = 3600.0,
     ocr_router: OcrRouter | None = None,
+    impersonation_target: str = _DEFAULT_IMPERSONATION_TARGET,
 ) -> Crawler:
     """Build a :class:`Crawler` with explicit tuning knobs.
 
@@ -449,6 +695,9 @@ def create_crawler(
         When True (default), honor ``robots.txt`` before scraping non-API career URLs.
     robots_cache_ttl:
         Cache duration for parsed ``robots.txt`` per site (seconds).
+    impersonation_target:
+        curl_cffi browser profile for tier-2 escalation (default ``chrome124``).
+        Requires ``strata-harvest[stealth]``; has no effect without curl_cffi.
 
     Returns
     -------
@@ -476,6 +725,7 @@ def create_crawler(
         respect_robots=respect_robots,
         robots_cache_ttl=robots_cache_ttl,
         ocr_router=ocr_router,
+        impersonation_target=impersonation_target,
     )
 
 

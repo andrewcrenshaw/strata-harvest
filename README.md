@@ -22,6 +22,14 @@ Job data is fragmented across dozens of ATS platforms, each with its own page st
 
 The result is a single `harvest(url)` call that returns clean, typed job data from any career page.
 
+## Recent Updates (2026-04-16)
+
+- **7 new ATS providers** — Breezy, Eightfold, Phenom, Pinpoint, Recruitee, Rippling, SAP SuccessFactors, TeamTailor
+- **Tiered fetcher architecture** — Stealth fetcher (cURL-cffi impersonation), impersonating fetcher (curlcffi), and base fetcher tiers for robust career page scraping
+- **Sitemap.xml support** — Incremental crawl with Last-Modified detection and ETag-based caching
+- **Careers page validator** — Pre-harvest validation stage with Extruct-based ATS fingerprinting
+- **Adaptive extraction** — Trafilatura + Extruct structured data parsing with fallback to LLM when needed
+
 ## Quick Start
 
 ```python
@@ -106,8 +114,16 @@ Each supported ATS has a dedicated parser that knows how to call its API and nor
 | Greenhouse | URL + DOM | Full | REST (`/embed/api/v1/jobs`) |
 | Lever | URL + DOM | Full | JSON feed |
 | Ashby | URL + DOM | Full | GraphQL |
-| Workday | URL + DOM | Planned | — |
-| iCIMS | URL + DOM | Planned | — |
+| Workday | URL + DOM | Full | iFrame embed parsing |
+| iCIMS | URL + DOM | Full | REST + HTML parsing |
+| Breezy | URL + DOM | Full | JSON API |
+| Eightfold | URL + DOM | Full | Structured data + LLM |
+| Phenom | URL + DOM | Full | REST API |
+| Pinpoint | URL + DOM | Full | JSON API |
+| Recruitee | URL + DOM | Full | JSON feed |
+| Rippling | URL + DOM | Full | REST API |
+| SAP SuccessFactors | URL + DOM | Full | REST + XML |
+| TeamTailor | URL + DOM | Full | REST API |
 | Unknown | — | LLM fallback | Page content → structured extraction |
 
 ### LLM Fallback

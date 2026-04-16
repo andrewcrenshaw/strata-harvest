@@ -372,3 +372,159 @@ class TestICIMSParser:
             assert isinstance(r, JobListing)
             assert r.title
             assert r.url
+
+
+# ---------------------------------------------------------------------------
+# Enriched fixture tests — prove richer extraction (salary, remote, type)
+# PCC-1949 AC: one fixture per provider with extra JSON-LD fields
+# ---------------------------------------------------------------------------
+
+# Workday: JSON-LD with employmentType, baseSalary, jobLocationType=TELECOMMUTE
+WORKDAY_RICH_JSON_LD_HTML = """<!DOCTYPE html>
+<html>
+<head>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "JobPosting",
+  "title": "Staff Machine Learning Engineer",
+  "url": "https://company.wd5.myworkdayjobs.com/careers/job/Remote/ML-Engineer_R-9900",
+  "employmentType": "FULL_TIME",
+  "jobLocationType": "TELECOMMUTE",
+  "baseSalary": {
+    "@type": "MonetaryAmount",
+    "currency": "USD",
+    "value": {
+      "@type": "QuantitativeValue",
+      "minValue": 180000,
+      "maxValue": 240000,
+      "unitText": "YEAR"
+    }
+  },
+  "description": "<p>Build ML systems at scale.</p>"
+}
+</script>
+</head>
+<body></body>
+</html>"""
+
+# iCIMS: JSON-LD with employmentType, baseSalary, jobLocationType=TELECOMMUTE
+ICIMS_RICH_JSON_LD_HTML = """<!DOCTYPE html>
+<html>
+<head>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "JobPosting",
+  "title": "Senior Data Analyst",
+  "url": "https://careers-company.icims.com/jobs/7890/data-analyst/job",
+  "employmentType": "CONTRACTOR",
+  "jobLocationType": "TELECOMMUTE",
+  "baseSalary": {
+    "@type": "MonetaryAmount",
+    "currency": "USD",
+    "value": {
+      "@type": "QuantitativeValue",
+      "value": 95000,
+      "unitText": "YEAR"
+    }
+  },
+  "description": "Analyze data pipelines."
+}
+</script>
+</head>
+<body></body>
+</html>"""
+
+
+@pytest.mark.verification
+class TestWorkdayRicherExtraction:
+    """PCC-1949 AC: Extruct-based extraction exposes salary, remote, employmentType."""
+
+    def test_employment_type_extracted(self) -> None:
+        parser = WorkdayParser()
+        results = parser.parse(
+            WORKDAY_RICH_JSON_LD_HTML,
+            url="https://company.wd5.myworkdayjobs.com/careers",
+        )
+        assert len(results) == 1
+        assert results[0].employment_type == "FULL_TIME"
+
+    def test_salary_range_extracted(self) -> None:
+        parser = WorkdayParser()
+        results = parser.parse(
+            WORKDAY_RICH_JSON_LD_HTML,
+            url="https://company.wd5.myworkdayjobs.com/careers",
+        )
+        assert len(results) == 1
+        assert results[0].salary_range is not None
+        assert "180,000" in (results[0].salary_range or "")
+        assert "240,000" in (results[0].salary_range or "")
+
+    def test_remote_location_from_job_location_type(self) -> None:
+        parser = WorkdayParser()
+        results = parser.parse(
+            WORKDAY_RICH_JSON_LD_HTML,
+            url="https://company.wd5.myworkdayjobs.com/careers",
+        )
+        assert len(results) == 1
+        assert results[0].location == "Remote"
+
+    def test_rich_fixture_is_valid_job_listing(self) -> None:
+        from strata_harvest.models import JobListing
+
+        parser = WorkdayParser()
+        results = parser.parse(
+            WORKDAY_RICH_JSON_LD_HTML,
+            url="https://company.wd5.myworkdayjobs.com/careers",
+        )
+        assert len(results) == 1
+        assert isinstance(results[0], JobListing)
+        assert results[0].title == "Staff Machine Learning Engineer"
+        assert results[0].ats_provider.value == "workday"
+
+
+@pytest.mark.verification
+class TestICIMSRicherExtraction:
+    """PCC-1949 AC: Extruct-based extraction exposes salary, remote, employmentType."""
+
+    def test_employment_type_extracted(self) -> None:
+        parser = ICIMSParser()
+        results = parser.parse(
+            ICIMS_RICH_JSON_LD_HTML,
+            url="https://careers-company.icims.com/jobs/search",
+        )
+        assert len(results) == 1
+        assert results[0].employment_type == "CONTRACTOR"
+
+    def test_salary_range_extracted(self) -> None:
+        parser = ICIMSParser()
+        results = parser.parse(
+            ICIMS_RICH_JSON_LD_HTML,
+            url="https://careers-company.icims.com/jobs/search",
+        )
+        assert len(results) == 1
+        assert results[0].salary_range is not None
+        assert "95,000" in (results[0].salary_range or "")
+
+    def test_remote_location_from_job_location_type(self) -> None:
+        parser = ICIMSParser()
+        results = parser.parse(
+            ICIMS_RICH_JSON_LD_HTML,
+            url="https://careers-company.icims.com/jobs/search",
+        )
+        assert len(results) == 1
+        assert results[0].location == "Remote"
+
+    def test_rich_fixture_is_valid_job_listing(self) -> None:
+        from strata_harvest.models import JobListing
+
+        parser = ICIMSParser()
+        results = parser.parse(
+            ICIMS_RICH_JSON_LD_HTML,
+            url="https://careers-company.icims.com/jobs/search",
+        )
+        assert len(results) == 1
+        assert isinstance(results[0], JobListing)
+        assert results[0].title == "Senior Data Analyst"
+        assert results[0].ats_provider.value == "icims"

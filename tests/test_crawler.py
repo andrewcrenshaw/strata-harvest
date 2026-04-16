@@ -813,3 +813,302 @@ class TestExports:
         import strata_harvest
 
         assert callable(strata_harvest.create_crawler)
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 escalation helpers (PCC-1947)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestTier3EscalationReason:
+    """Unit tests for the _tier3_escalation_reason() helper function."""
+
+    def test_403_returns_tier3_403(self) -> None:
+        from strata_harvest.crawler import _tier3_escalation_reason
+
+        result = FetchResult(url="https://x.com/careers", status_code=403, error="HTTP 403")
+        assert _tier3_escalation_reason(result) == "TIER3_403"
+
+    def test_cloudflare_challenge_body_returns_tier3_cloudflare(self) -> None:
+        from strata_harvest.crawler import _tier3_escalation_reason
+
+        cf_html = (
+            "<html><body>cloudflare just a moment please wait "
+            "<script>cf-browser-verification</script></body></html>"
+        )
+        result = FetchResult(url="https://x.com/careers", status_code=200, content=cf_html)
+        assert _tier3_escalation_reason(result) == "TIER3_CLOUDFLARE"
+
+    def test_cloudflare_without_markers_not_escalated(self) -> None:
+        """'cloudflare' in body alone is not enough — must also have a challenge marker."""
+        from strata_harvest.crawler import _tier3_escalation_reason
+
+        rich_html = "<html><body>" + ("<p>Job listing</p>" * 50) + "cloudflare</body></html>"
+        result = FetchResult(url="https://x.com/careers", status_code=200, content=rich_html)
+        assert _tier3_escalation_reason(result) is None
+
+    def test_empty_200_returns_tier3_empty_200(self) -> None:
+        from strata_harvest.crawler import _tier3_escalation_reason
+
+        result = FetchResult(
+            url="https://x.com/careers",
+            status_code=200,
+            content="<html><body></body></html>",
+        )
+        assert _tier3_escalation_reason(result) == "TIER3_EMPTY_200"
+
+    def test_rich_200_no_escalation(self) -> None:
+        from strata_harvest.crawler import _tier3_escalation_reason
+
+        rich_html = (
+            "<html><body>" + ("<p>Job listing with lots of text here</p>" * 20) + "</body></html>"
+        )
+        result = FetchResult(url="https://x.com/careers", status_code=200, content=rich_html)
+        assert _tier3_escalation_reason(result) is None
+
+    def test_none_status_no_escalation(self) -> None:
+        from strata_harvest.crawler import _tier3_escalation_reason
+
+        result = FetchResult(url="https://x.com/careers", status_code=None, content="")
+        assert _tier3_escalation_reason(result) is None
+
+    def test_non_200_non_403_no_escalation(self) -> None:
+        """500 errors are not escalated to tier-3 (that's a server error, not bot-blocking)."""
+        from strata_harvest.crawler import _tier3_escalation_reason
+
+        result = FetchResult(url="https://x.com/careers", status_code=500, error="HTTP 500")
+        assert _tier3_escalation_reason(result) is None
+
+
+# ---------------------------------------------------------------------------
+# Tier-3 escalation in Crawler.scrape() (PCC-1947)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestCrawlerTier3Escalation:
+    """Verify StealthyFetcher tier-3 escalation in Crawler.scrape()."""
+
+    def _stealth_ok_fetch(self, url: str) -> FetchResult:
+        return FetchResult(
+            url=url,
+            status_code=200,
+            content=(
+                "<html><body><h1>Jobs after stealth</h1>" + ("<p>job</p>" * 30) + "</body></html>"
+            ),
+            content_type="text/html",
+            elapsed_ms=120.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_tier3_triggered_on_403(self) -> None:
+        """AC: 403 response escalates to StealthyFetcher (TIER3_403)."""
+        url = "https://blocked.example.com/careers"
+        blocked_fetch = FetchResult(url=url, status_code=403, error="HTTP 403: Forbidden")
+        stealth_response = self._stealth_ok_fetch(url)
+
+        mock_stealth = AsyncMock(return_value=stealth_response)
+        mock_stealth_cls = MagicMock(return_value=MagicMock(fetch=mock_stealth))
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=blocked_fetch)),
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(return_value=ATSInfo())),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+        ):
+            c = create_crawler(respect_robots=False)
+            result = await c.scrape(url)
+
+        mock_stealth.assert_awaited_once_with(url)
+        # Stealth fetch succeeded — error is None, or validator ran on stealth content
+        error = result.error or ""
+        assert result.error is None or "validator" in error.lower() or result.fetch_ok
+
+    @pytest.mark.asyncio
+    async def test_tier3_triggered_on_cloudflare_challenge(self) -> None:
+        """AC: Cloudflare challenge body escalates to StealthyFetcher (TIER3_CLOUDFLARE)."""
+        url = "https://cf-protected.example.com/careers"
+        cf_content = (
+            "<html><head><title>Just a moment...</title></head>"
+            "<body>cloudflare just a moment cf-browser-verification ray id</body></html>"
+        )
+        cf_fetch = FetchResult(url=url, status_code=200, content=cf_content, elapsed_ms=50.0)
+        stealth_response = self._stealth_ok_fetch(url)
+
+        mock_stealth = AsyncMock(return_value=stealth_response)
+        mock_stealth_cls = MagicMock(return_value=MagicMock(fetch=mock_stealth))
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=cf_fetch)),
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(return_value=ATSInfo())),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+        ):
+            c = create_crawler(respect_robots=False)
+            await c.scrape(url)
+
+        mock_stealth.assert_awaited_once_with(url)
+
+    @pytest.mark.asyncio
+    async def test_tier3_triggered_on_empty_200(self) -> None:
+        """AC: Empty body with 200 escalates to StealthyFetcher (TIER3_EMPTY_200)."""
+        url = "https://silent-block.example.com/careers"
+        empty_fetch = FetchResult(
+            url=url, status_code=200, content="<html><body></body></html>", elapsed_ms=30.0
+        )
+        stealth_response = self._stealth_ok_fetch(url)
+
+        mock_stealth = AsyncMock(return_value=stealth_response)
+        mock_stealth_cls = MagicMock(return_value=MagicMock(fetch=mock_stealth))
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=empty_fetch)),
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(return_value=ATSInfo())),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+        ):
+            c = create_crawler(respect_robots=False)
+            await c.scrape(url)
+
+        mock_stealth.assert_awaited_once_with(url)
+
+    @pytest.mark.asyncio
+    async def test_tier3_not_triggered_on_clean_200(self) -> None:
+        """AC: Rich 200 response does NOT escalate to tier-3."""
+        url = "https://normal.example.com/careers"
+        rich_html = "<html><body>" + ("<p>Software Engineer role</p>" * 30) + "</body></html>"
+        ok_fetch = FetchResult(url=url, status_code=200, content=rich_html, elapsed_ms=25.0)
+
+        mock_stealth_cls = MagicMock()
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=ok_fetch)),
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(return_value=ATSInfo())),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+        ):
+            c = create_crawler(respect_robots=False)
+            await c.scrape(url)
+
+        mock_stealth_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_tier3_skipped_for_api_native_ats(self) -> None:
+        """AC: Greenhouse/Lever/Ashby bypass tier-3 (API-native, not HTML-fetched)."""
+        url = "https://boards.greenhouse.io/acme/jobs"
+        blocked_fetch = FetchResult(url=url, status_code=403, error="HTTP 403")
+
+        mock_stealth_cls = MagicMock()
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=blocked_fetch)),
+            patch(
+                "strata_harvest.crawler.detect_ats",
+                AsyncMock(return_value=ATSInfo(provider=ATSProvider.GREENHOUSE)),
+            ),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+        ):
+            c = create_crawler(respect_robots=False)
+            await c.scrape(url)
+
+        mock_stealth_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_tier3_skipped_when_scrapling_unavailable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """AC: When scrapling not installed, tier-3 is silently skipped (debug log)."""
+        import logging
+
+        url = "https://blocked.example.com/careers"
+        blocked_fetch = FetchResult(url=url, status_code=403, error="HTTP 403")
+
+        mock_stealth_cls = MagicMock()
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=blocked_fetch)),
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(return_value=ATSInfo())),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", False),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+            caplog.at_level(logging.DEBUG, logger="strata_harvest.crawler"),
+        ):
+            c = create_crawler(respect_robots=False)
+            await c.scrape(url)
+
+        mock_stealth_cls.assert_not_called()
+        assert any("scrapling not available" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_tier3_reason_code_in_log(self, caplog: pytest.LogCaptureFixture) -> None:
+        """AC: Tier-3 escalation log entry contains the reason code."""
+        import logging
+
+        url = "https://blocked.example.com/careers"
+        blocked_fetch = FetchResult(url=url, status_code=403, error="HTTP 403")
+        stealth_response = self._stealth_ok_fetch(url)
+
+        mock_stealth = AsyncMock(return_value=stealth_response)
+        mock_stealth_cls = MagicMock(return_value=MagicMock(fetch=mock_stealth))
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=blocked_fetch)),
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(return_value=ATSInfo())),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+            caplog.at_level(logging.INFO, logger="strata_harvest.crawler"),
+        ):
+            c = create_crawler(respect_robots=False)
+            await c.scrape(url)
+
+        assert any("TIER3_403" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_tier3_failure_logged_not_raised(self, caplog: pytest.LogCaptureFixture) -> None:
+        """AC: StealthyFetcher failure is logged as warning; scrape continues without raise."""
+        import logging
+
+        url = "https://blocked.example.com/careers"
+        blocked_fetch = FetchResult(url=url, status_code=403, error="HTTP 403")
+        stealth_fail = FetchResult(url=url, status_code=None, error="browser crash")
+
+        mock_stealth = AsyncMock(return_value=stealth_fail)
+        mock_stealth_cls = MagicMock(return_value=MagicMock(fetch=mock_stealth))
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=blocked_fetch)),
+            patch("strata_harvest.crawler.detect_ats", AsyncMock(return_value=ATSInfo())),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+            caplog.at_level(logging.WARNING, logger="strata_harvest.crawler"),
+        ):
+            c = create_crawler(respect_robots=False)
+            result = await c.scrape(url)
+
+        assert isinstance(result, ScrapeResult)
+        assert any("Tier-3 StealthyFetcher failed" in r.message for r in caplog.records)

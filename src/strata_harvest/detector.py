@@ -30,7 +30,7 @@ _URL_PATTERNS: list[tuple[re.Pattern[str], ATSProvider, str | None]] = [
     (re.compile(r"jobs\.ashbyhq\.com|ashby\.io"), ATSProvider.ASHBY, None),
     (re.compile(r"\.myworkdayjobs\.com|workday\.com"), ATSProvider.WORKDAY, None),
     (re.compile(r"\.icims\.com|icims\.com"), ATSProvider.ICIMS, None),
-    (re.compile(r"ats\.rippling\.com", re.I), ATSProvider.RIPPLING, None),
+    (re.compile(r"ats\.rippling\.com|rippling\.com/careers", re.I), ATSProvider.RIPPLING, None),
     (re.compile(r"\.workable\.com", re.I), ATSProvider.WORKABLE, None),
     (re.compile(r"\.bamboohr\.com/careers", re.I), ATSProvider.BAMBOOHR, None),
     (
@@ -40,6 +40,18 @@ _URL_PATTERNS: list[tuple[re.Pattern[str], ATSProvider, str | None]] = [
     ),
     (re.compile(r"jobs\.personio\.de", re.I), ATSProvider.PERSONIO, None),
     (re.compile(r"jobs\.jobvite\.com", re.I), ATSProvider.JOBVITE, None),
+    # --- New providers (PCC-1952) ---
+    (re.compile(r"\.teamtailor\.com|api\.teamtailor\.com", re.I), ATSProvider.TEAMTAILOR, None),
+    (re.compile(r"\.recruitee\.com", re.I), ATSProvider.RECRUITEE, None),
+    (re.compile(r"\.pinpointhq\.com", re.I), ATSProvider.PINPOINT, None),
+    (re.compile(r"\.breezy\.hr", re.I), ATSProvider.BREEZY, None),
+    (re.compile(r"phenom\.com|phenompeople\.com", re.I), ATSProvider.PHENOM, None),
+    (re.compile(r"\.eightfold\.ai", re.I), ATSProvider.EIGHTFOLD, None),
+    (
+        re.compile(r"successfactors\.com|career\.sap\.com", re.I),
+        ATSProvider.SAP_SUCCESSFACTORS,
+        None,
+    ),
 ]
 
 _DOM_SIGNATURES: list[tuple[re.Pattern[str], ATSProvider, float]] = [
@@ -58,6 +70,30 @@ _DOM_SIGNATURES: list[tuple[re.Pattern[str], ATSProvider, float]] = [
     ),
     (re.compile(r"personio\.de|personio\.com|personio-", re.I), ATSProvider.PERSONIO, 0.85),
     (re.compile(r"jobvite\.com|jobvite-", re.I), ATSProvider.JOBVITE, 0.85),
+    # --- New providers (PCC-1952) ---
+    (re.compile(r"teamtailor\.com|tt-job|data-teamtailor", re.I), ATSProvider.TEAMTAILOR, 0.85),
+    (re.compile(r"recruitee\.com|rt-job|recruitee-job", re.I), ATSProvider.RECRUITEE, 0.85),
+    (
+        re.compile(r"pinpointhq\.com|pinpoint-job|data-pinpoint", re.I),
+        ATSProvider.PINPOINT,
+        0.85,
+    ),
+    (re.compile(r"breezy\.hr|breezy-position|data-breezy", re.I), ATSProvider.BREEZY, 0.85),
+    (
+        re.compile(r"phenom\.com|phenompeople\.com|class=['\"][^'\"]*ph(?:w)?-", re.I),
+        ATSProvider.PHENOM,
+        0.85,
+    ),
+    (
+        re.compile(r"eightfold\.ai|class=['\"][^'\"]*(?:eightfold-|efai-)", re.I),
+        ATSProvider.EIGHTFOLD,
+        0.85,
+    ),
+    (
+        re.compile(r"successfactors\.com|sfsf-|SAP SuccessFactors", re.I),
+        ATSProvider.SAP_SUCCESSFACTORS,
+        0.85,
+    ),
 ]
 
 
