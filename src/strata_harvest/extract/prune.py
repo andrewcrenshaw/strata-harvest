@@ -18,8 +18,8 @@ try:
 
     _TRAFILATURA_AVAILABLE = True
 except ImportError:
-    trafilatura = None  # type: ignore[assignment]
-    Extractor = None  # type: ignore[assignment,misc]
+    trafilatura = None  # type: ignore[assignment,unused-ignore]
+    Extractor = None  # type: ignore[assignment,misc,unused-ignore]
     _TRAFILATURA_AVAILABLE = False
 
 

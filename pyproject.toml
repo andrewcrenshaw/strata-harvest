@@ -128,7 +128,7 @@ module = "curl_cffi.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "trafilatura"
+module = "trafilatura.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

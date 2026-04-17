@@ -14,7 +14,7 @@ from typing import TypeVar
 logger = logging.getLogger(__name__)
 
 try:
-    from instructor import from_ollama  # type: ignore[attr-defined]
+    from instructor import from_ollama  # type: ignore[attr-defined,unused-ignore]
 
     _INSTRUCTOR_AVAILABLE = True
 except ImportError:
