@@ -4,7 +4,7 @@ This guide walks through adding a parser for a new applicant tracking system. By
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Dev dependencies installed: `uv sync --all-extras` or `pip install -e ".[dev]"`
 - Familiarity with the target ATS's career page structure or API
 
