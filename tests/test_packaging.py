@@ -19,7 +19,7 @@ def test_pyproject_name_version_python_requires() -> None:
     proj = data["project"]
     assert proj["name"] == "strata-harvest"
     assert proj["version"] == "0.1.7"
-    assert proj["requires-python"] == ">=3.11"
+    assert proj["requires-python"] == ">=3.12"
 
 
 @pytest.mark.verification
