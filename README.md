@@ -22,9 +22,15 @@ Job data is fragmented across dozens of ATS platforms, each with its own page st
 
 The result is a single `harvest(url)` call that returns clean, typed job data from any career page.
 
-## Recent Updates (2026-04-16)
+## Recent Updates
 
-- **7 new ATS providers** — Breezy, Eightfold, Phenom, Pinpoint, Recruitee, Rippling, SAP SuccessFactors, TeamTailor
+**2026-04-17 (v0.1.8)**
+- **JSON salvage** — `json-repair` automatically recovers malformed LLM output; results tagged with `ParseStatus` (CLEAN / SALVAGED / TRUNCATED / FAILED)
+- **Truncation retry** — Detects `finish_reason=length`, retries with 2× `max_tokens`, falls back to chunked parsing
+- **Salvage rate alerting** — WARN logged when a source's salvage rate exceeds 10% over a rolling 24-hour window
+
+**2026-04-16 (v0.1.7)**
+- **8 new ATS providers** — Breezy, Eightfold, Phenom, Pinpoint, Recruitee, Rippling, SAP SuccessFactors, TeamTailor
 - **Tiered fetcher architecture** — Stealth fetcher (cURL-cffi impersonation), impersonating fetcher (curlcffi), and base fetcher tiers for robust career page scraping
 - **Sitemap.xml support** — Incremental crawl with Last-Modified detection and ETag-based caching
 - **Careers page validator** — Pre-harvest validation stage with Extruct-based ATS fingerprinting
@@ -64,7 +70,7 @@ For LLM-based fallback parsing (handles unknown ATS providers):
 pip install strata-harvest[llm]
 ```
 
-Requires **Python 3.11+**.
+Requires **Python 3.12+**.
 
 ## Features
 
@@ -85,9 +91,18 @@ URL → ATS Detection → Provider-Specific Parser → Structured JobListings
          │                     ├── Greenhouse (REST API)
          │                     ├── Lever (JSON API)
          │                     ├── Ashby (GraphQL)
-         │                     ├── Workday (planned)
-         │                     ├── iCIMS (planned)
+         │                     ├── Workday (iFrame embed)
+         │                     ├── iCIMS (REST + HTML)
+         │                     ├── Breezy (JSON API)
+         │                     ├── Eightfold (structured data + LLM)
+         │                     ├── Phenom (REST API)
+         │                     ├── Pinpoint (JSON API)
+         │                     ├── Recruitee (JSON feed)
+         │                     ├── Rippling (REST API)
+         │                     ├── SAP SuccessFactors (REST + XML)
+         │                     ├── TeamTailor (REST API)
          │                     └── Unknown → LLM fallback
+         │                                  (JSON salvage + truncation retry)
          │
          └── Pattern matching + DOM probing
              Returns ATSInfo with provider + confidence score
@@ -140,11 +155,12 @@ result = await crawler.scrape("https://custom-careers-page.com/jobs")
 All parsed data uses typed Pydantic models:
 
 ```python
-from strata_harvest.models import JobListing, ScrapeResult, ATSInfo
+from strata_harvest.models import JobListing, ScrapeResult, ATSInfo, ParseStatus
 
 # JobListing: title, url, location, department, description, requirements, salary_range, ...
-# ScrapeResult: jobs, ats_info, error, scrape_duration_ms, content_hash, changed
+# ScrapeResult: jobs, ats_info, error, scrape_duration_ms, content_hash, changed, parse_status
 # ATSInfo: provider, confidence, detection_method
+# ParseStatus: CLEAN | SALVAGED | TRUNCATED | FAILED  (LLM extraction quality signal)
 ```
 
 ## Use Cases
@@ -169,7 +185,7 @@ But `strata-harvest` is fully standalone. It has no dependency on the Strata pla
 
 ## Development
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/) (or pip/venv).
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/) (or pip/venv).
 
 ```bash
 git clone https://github.com/andrewcrenshaw/strata-harvest.git
