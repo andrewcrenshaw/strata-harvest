@@ -9,6 +9,27 @@ from typing import Any
 from pydantic import BaseModel, Field, HttpUrl
 
 
+class ParseStatus(StrEnum):
+    """Parse outcome for a single LLM extraction attempt.
+
+    Attributes
+    ----------
+    CLEAN:
+        JSON decoded successfully on the first try.
+    SALVAGED:
+        JSON was malformed but repaired via json-repair.
+    TRUNCATED:
+        LLM response was cut off at the token limit and could not be recovered.
+    FAILED:
+        Extraction failed (LLM error, unrecoverable JSON, or no content).
+    """
+
+    CLEAN = "clean"
+    SALVAGED = "salvaged"
+    TRUNCATED = "truncated"
+    FAILED = "failed"
+
+
 class ATSProvider(StrEnum):
     """Supported ATS vendors recognized by parsers and detection.
 
@@ -194,6 +215,7 @@ class ScrapeResult(BaseModel):
     scrape_duration_ms: float = 0.0
     error: str | None = None
     fetch_ok: bool = False
+    parse_status: ParseStatus | None = None
 
     @property
     def ok(self) -> bool:

@@ -6,6 +6,13 @@ Covers all acceptance criteria:
 - Returns list[JobListing] in same format as ATS parsers
 - Handles: multi-page career sites, single-page job boards, JS-rendered content
 - Tests with saved HTML from 3+ real career pages without recognized ATS
+
+PCC-1969 additions:
+- TruncatedCompletionError on finish_reason == "length"
+- Retry with doubled max_tokens on truncation
+- json-repair salvage on malformed JSON
+- ParseStatus tracking (clean / salvaged / truncated / failed)
+- salvage_rate > 10% emits WARN
 """
 
 from __future__ import annotations
@@ -19,8 +26,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from strata_harvest.models import ATSProvider, JobListing
-from strata_harvest.parsers.llm_fallback import LLMFallbackParser
+from strata_harvest.models import ATSProvider, JobListing, ParseStatus
+from strata_harvest.parsers.llm_fallback import (
+    _DEFAULT_MAX_TOKENS,
+    LLMFallbackParser,
+    ParseResult,
+    ParseStatusTracker,
+    TruncatedCompletionError,
+    get_parse_tracker,
+)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "llm_fallback"
 
@@ -625,3 +639,440 @@ class TestLLMFallbackPrompt:
         all_content = " ".join(m["content"] for m in messages)
         assert "title" in all_content
         assert "url" in all_content
+
+
+# -----------------------------------------------------------------------
+# PCC-1969: Truncation detection
+# -----------------------------------------------------------------------
+
+
+def _make_truncated_response(content: str = '{"jobs": [{"title": "Eng"') -> MagicMock:
+    """Build a mock litellm response with finish_reason='length'."""
+    message = MagicMock()
+    message.content = content
+    choice = MagicMock()
+    choice.message = message
+    choice.finish_reason = "length"
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+@pytest.mark.verification
+class TestTruncationDetection:
+    """finish_reason == 'length' raises TruncatedCompletionError."""
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_finish_reason_length_raises(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_truncated_response()
+        parser = LLMFallbackParser()
+        with pytest.raises(TruncatedCompletionError):
+            parser._completion_sync("some content", "https://example.com")
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_finish_reason_stop_does_not_raise(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_llm_response([])
+        parser = LLMFallbackParser()
+        # Should not raise — MagicMock finish_reason != "length"
+        parser._completion_sync("some content", "https://example.com")
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_truncation_error_message_includes_url(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_truncated_response()
+        parser = LLMFallbackParser()
+        with pytest.raises(TruncatedCompletionError, match="https://example.com"):
+            parser._completion_sync("content", "https://example.com")
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_max_tokens_forwarded_to_litellm(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_llm_response([])
+        parser = LLMFallbackParser()
+        parser._completion_sync("content", "https://example.com", max_tokens=2048)
+
+        kw = mock_litellm.completion.call_args.kwargs
+        assert kw.get("max_tokens") == 2048
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_no_max_tokens_arg_omitted(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_llm_response([])
+        parser = LLMFallbackParser()
+        parser._completion_sync("content", "https://example.com")
+
+        kw = mock_litellm.completion.call_args.kwargs
+        assert "max_tokens" not in kw
+
+
+# -----------------------------------------------------------------------
+# PCC-1969: Truncation remediation
+# -----------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestTruncationRemediation:
+    """Retry with doubled tokens; fall back to chunked parse on second truncation."""
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_truncation_triggers_retry(self, mock_litellm: MagicMock) -> None:
+        """First call truncated → second call succeeds with jobs."""
+        good_response = _make_llm_response([{"title": "Eng", "url": "https://example.com/eng"}])
+        mock_litellm.completion.side_effect = [
+            _make_truncated_response(),
+            good_response,
+        ]
+        parser = LLMFallbackParser()
+        result = parser.parse("<html><body>Jobs</body></html>", url="https://example.com")
+
+        assert len(result) == 1
+        assert result[0].title == "Eng"
+        assert mock_litellm.completion.call_count == 2
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_retry_uses_doubled_tokens(self, mock_litellm: MagicMock) -> None:
+        """Retry call must pass max_tokens == DEFAULT_MAX_TOKENS * 2."""
+        good_response = _make_llm_response([])
+        mock_litellm.completion.side_effect = [
+            _make_truncated_response(),
+            good_response,
+        ]
+        parser = LLMFallbackParser()
+        parser.parse("<html><body>Jobs</body></html>", url="https://example.com")
+
+        retry_call = mock_litellm.completion.call_args_list[1]
+        assert retry_call.kwargs.get("max_tokens") == _DEFAULT_MAX_TOKENS * 2
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_retry_uses_custom_max_tokens_doubled(self, mock_litellm: MagicMock) -> None:
+        """When max_tokens set on parser, retry uses that value * 2."""
+        good_response = _make_llm_response([])
+        mock_litellm.completion.side_effect = [
+            _make_truncated_response(),
+            good_response,
+        ]
+        parser = LLMFallbackParser(max_tokens=1024)
+        parser.parse("<html><body>Jobs</body></html>", url="https://example.com")
+
+        retry_call = mock_litellm.completion.call_args_list[1]
+        assert retry_call.kwargs.get("max_tokens") == 2048
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_second_truncation_returns_truncated_status(self, mock_litellm: MagicMock) -> None:
+        """Both calls truncated → chunked parse attempts; if all chunks fail, TRUNCATED."""
+        mock_litellm.completion.side_effect = TruncatedCompletionError("truncated")
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status(
+            "<html><body>Jobs</body></html>", url="https://example.com"
+        )
+        assert result.parse_status == ParseStatus.TRUNCATED
+        assert result.jobs == []
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_truncation_parse_status_is_clean_after_recovery(self, mock_litellm: MagicMock) -> None:
+        """Successful retry → parse_status reflects actual JSON quality (CLEAN)."""
+        good_response = _make_llm_response([{"title": "Eng", "url": "https://example.com/eng"}])
+        mock_litellm.completion.side_effect = [
+            _make_truncated_response(),
+            good_response,
+        ]
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status(
+            "<html><body>Jobs</body></html>", url="https://example.com"
+        )
+        assert result.parse_status == ParseStatus.CLEAN
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    async def test_async_truncation_retries(self, mock_litellm: MagicMock) -> None:
+        """Async path also triggers retry on truncation."""
+        good_response = _make_llm_response([{"title": "Eng", "url": "https://example.com/eng"}])
+        mock_litellm.completion.side_effect = [
+            _make_truncated_response(),
+            good_response,
+        ]
+        parser = LLMFallbackParser()
+        result = await parser.parse_async(
+            "<html><body>Jobs</body></html>", url="https://example.com"
+        )
+        assert len(result) == 1
+        assert mock_litellm.completion.call_count == 2
+
+
+# -----------------------------------------------------------------------
+# PCC-1969: json-repair salvage
+# -----------------------------------------------------------------------
+
+
+def _make_malformed_response(bad_json: str) -> MagicMock:
+    message = MagicMock()
+    message.content = bad_json
+    choice = MagicMock()
+    choice.message = message
+    choice.finish_reason = "stop"
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+@pytest.mark.verification
+class TestJsonRepairSalvage:
+    """json-repair parses malformed JSON and tags result as SALVAGED."""
+
+    @patch("strata_harvest.parsers.llm_fallback.json_repair")
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_trailing_comma_salvaged(self, mock_litellm: MagicMock, mock_repair: MagicMock) -> None:
+        bad_json = '{"jobs": [{"title": "Eng", "url": "https://ex.com/e"}],}'
+        mock_litellm.completion.return_value = _make_malformed_response(bad_json)
+        mock_repair.loads.return_value = {"jobs": [{"title": "Eng", "url": "https://ex.com/e"}]}
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.SALVAGED
+        assert len(result.jobs) == 1
+        assert result.jobs[0].title == "Eng"
+
+    @patch("strata_harvest.parsers.llm_fallback.json_repair")
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_unclosed_string_salvaged(
+        self, mock_litellm: MagicMock, mock_repair: MagicMock
+    ) -> None:
+        bad_json = '{"jobs": [{"title": "Eng", "url": "https://ex.com/e"}'
+        mock_litellm.completion.return_value = _make_malformed_response(bad_json)
+        mock_repair.loads.return_value = {"jobs": [{"title": "Eng", "url": "https://ex.com/e"}]}
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.SALVAGED
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_malformed_json_without_repair_returns_failed(self, mock_litellm: MagicMock) -> None:
+        """When json_repair is None, malformed JSON → FAILED."""
+        mock_litellm.completion.return_value = _make_malformed_response('{"jobs": [{"title": "Eng"')
+        parser = LLMFallbackParser()
+        with patch("strata_harvest.parsers.llm_fallback.json_repair", None):
+            result = parser.parse_with_status(
+                "<html><body>Jobs</body></html>", url="https://ex.com"
+            )
+        assert result.parse_status == ParseStatus.FAILED
+        assert result.jobs == []
+
+    @patch("strata_harvest.parsers.llm_fallback.json_repair")
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_clean_json_not_salvaged(self, mock_litellm: MagicMock, mock_repair: MagicMock) -> None:
+        """Valid JSON does NOT call json_repair."""
+        mock_litellm.completion.return_value = _make_llm_response(
+            [{"title": "Eng", "url": "https://ex.com/e"}]
+        )
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.CLEAN
+        mock_repair.loads.assert_not_called()
+
+    @patch("strata_harvest.parsers.llm_fallback.json_repair")
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_json_repair_failure_returns_failed(
+        self, mock_litellm: MagicMock, mock_repair: MagicMock
+    ) -> None:
+        """If json_repair also raises, result is FAILED."""
+        mock_litellm.completion.return_value = _make_malformed_response("not json at all")
+        mock_repair.loads.side_effect = Exception("can't repair")
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.FAILED
+
+
+# -----------------------------------------------------------------------
+# PCC-1969: ParseStatusTracker
+# -----------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestParseStatusTracker:
+    """Unit tests for ParseStatusTracker rolling-window logic."""
+
+    def test_records_and_counts(self) -> None:
+        t = ParseStatusTracker()
+        t.record("example.com", "m", ParseStatus.CLEAN)
+        t.record("example.com", "m", ParseStatus.SALVAGED)
+        counts = t.status_counts("example.com", "m")
+        assert counts["clean"] == 1
+        assert counts["salvaged"] == 1
+        assert counts["truncated"] == 0
+        assert counts["failed"] == 0
+
+    def test_salvage_rate_calculation(self) -> None:
+        t = ParseStatusTracker()
+        for _ in range(9):
+            t.record("s", "m", ParseStatus.CLEAN)
+        t.record("s", "m", ParseStatus.SALVAGED)
+        assert abs(t.salvage_rate("s", "m") - 0.10) < 1e-9
+
+    def test_salvage_rate_zero_when_empty(self) -> None:
+        t = ParseStatusTracker()
+        assert t.salvage_rate("s", "m") == 0.0
+
+    def test_purges_old_events(self) -> None:
+        t = ParseStatusTracker()
+        old_ts = time.time() - 90_000  # 25h ago
+        t._events["s|m"].append((old_ts, ParseStatus.SALVAGED))
+        t.record("s", "m", ParseStatus.CLEAN)
+        counts = t.status_counts("s", "m")
+        assert counts["salvaged"] == 0
+        assert counts["clean"] == 1
+
+    def test_different_sources_isolated(self) -> None:
+        t = ParseStatusTracker()
+        t.record("a.com", "m", ParseStatus.FAILED)
+        t.record("b.com", "m", ParseStatus.CLEAN)
+        assert t.status_counts("a.com", "m")["failed"] == 1
+        assert t.status_counts("b.com", "m")["failed"] == 0
+
+    def test_different_models_isolated(self) -> None:
+        t = ParseStatusTracker()
+        t.record("s", "model-a", ParseStatus.FAILED)
+        t.record("s", "model-b", ParseStatus.CLEAN)
+        assert t.status_counts("s", "model-a")["failed"] == 1
+        assert t.status_counts("s", "model-b")["failed"] == 0
+
+    def test_get_parse_tracker_returns_singleton(self) -> None:
+        assert get_parse_tracker() is get_parse_tracker()
+
+
+# -----------------------------------------------------------------------
+# PCC-1969: Salvage-rate warning telemetry
+# -----------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestSalvageRateWarning:
+    """salvage_rate > 10% over 24h emits logger.warning with source name."""
+
+    @patch("strata_harvest.parsers.llm_fallback.json_repair")
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_high_salvage_rate_emits_warning(
+        self, mock_litellm: MagicMock, mock_repair: MagicMock
+    ) -> None:
+        bad_json = '{"jobs": [{"title": "J", "url": "https://hi.com/j"}],}'
+        mock_repair.loads.return_value = {"jobs": [{"title": "J", "url": "https://hi.com/j"}]}
+
+        # Fresh tracker so rate is deterministic
+        fresh_tracker = ParseStatusTracker()
+
+        parser = LLMFallbackParser()
+        with patch("strata_harvest.parsers.llm_fallback._tracker", fresh_tracker):
+            # Record 9 clean + 1 salvaged = exactly 10% (not > threshold)
+            for _ in range(9):
+                mock_litellm.completion.return_value = _make_llm_response(
+                    [{"title": "J", "url": "https://hi.com/j"}]
+                )
+                parser.parse("<html><body>J</body></html>", url="https://hi.com")
+
+            # 11th call is salvaged → now 1/10 = 10% — still not above threshold
+            mock_litellm.completion.return_value = _make_malformed_response(bad_json)
+            parser.parse("<html><body>J</body></html>", url="https://hi.com")
+
+            # 12th call is also salvaged → 2/11 ≈ 18% > 10%
+            with patch("strata_harvest.parsers.llm_fallback.logger") as mock_logger:
+                mock_litellm.completion.return_value = _make_malformed_response(bad_json)
+                parser.parse("<html><body>J</body></html>", url="https://hi.com")
+
+        mock_logger.warning.assert_called()
+        warning_args = mock_logger.warning.call_args_list[-1]
+        # Source hostname should appear in warning
+        assert "hi.com" in str(warning_args)
+
+    @patch("strata_harvest.parsers.llm_fallback.json_repair")
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_low_salvage_rate_no_warning(
+        self, mock_litellm: MagicMock, mock_repair: MagicMock
+    ) -> None:
+        bad_json = '{"jobs": [],}'
+        mock_repair.loads.return_value = {"jobs": []}
+
+        fresh_tracker = ParseStatusTracker()
+        parser = LLMFallbackParser()
+
+        with patch("strata_harvest.parsers.llm_fallback._tracker", fresh_tracker):
+            # 1 salvaged + 99 clean = 1% — well below threshold
+            mock_litellm.completion.return_value = _make_malformed_response(bad_json)
+            parser.parse("<html><body>J</body></html>", url="https://low.com")
+            for _ in range(99):
+                mock_litellm.completion.return_value = _make_llm_response([])
+                with patch("strata_harvest.parsers.llm_fallback.logger") as mock_logger:
+                    parser.parse("<html><body>J</body></html>", url="https://low.com")
+
+        # No warning about salvage rate should have been emitted in final iteration
+        for c in mock_logger.warning.call_args_list:
+            assert "salvage" not in str(c).lower()
+
+
+# -----------------------------------------------------------------------
+# PCC-1969: All four parse_status outcomes
+# -----------------------------------------------------------------------
+
+
+@pytest.mark.verification
+class TestAllFourParseStatuses:
+    """Unit tests ensuring each ParseStatus outcome can be produced."""
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_clean_status(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_llm_response(
+            [{"title": "Eng", "url": "https://ex.com/eng"}]
+        )
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.CLEAN
+        assert len(result.jobs) == 1
+
+    @patch("strata_harvest.parsers.llm_fallback.json_repair")
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_salvaged_status(self, mock_litellm: MagicMock, mock_repair: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_malformed_response(
+            '{"jobs": [{"title": "Eng", "url": "https://ex.com/eng"}]'  # missing }
+        )
+        mock_repair.loads.return_value = {"jobs": [{"title": "Eng", "url": "https://ex.com/eng"}]}
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.SALVAGED
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_truncated_status(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.side_effect = TruncatedCompletionError("truncated")
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.TRUNCATED
+        assert result.jobs == []
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_failed_status_on_exception(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.side_effect = Exception("network error")
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert result.parse_status == ParseStatus.FAILED
+        assert result.jobs == []
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_failed_status_on_unrepaired_json(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_malformed_response("not json")
+        parser = LLMFallbackParser()
+        with patch("strata_harvest.parsers.llm_fallback.json_repair", None):
+            result = parser.parse_with_status(
+                "<html><body>Jobs</body></html>", url="https://ex.com"
+            )
+        assert result.parse_status == ParseStatus.FAILED
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_parse_result_is_named_tuple(self, mock_litellm: MagicMock) -> None:
+        mock_litellm.completion.return_value = _make_llm_response([])
+        parser = LLMFallbackParser()
+        result = parser.parse_with_status("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert isinstance(result, ParseResult)
+        assert isinstance(result.jobs, list)
+        assert isinstance(result.parse_status, ParseStatus)
+
+    @patch("strata_harvest.parsers.llm_fallback.litellm")
+    def test_parse_with_status_parse_backward_compat(self, mock_litellm: MagicMock) -> None:
+        """parse() still returns list[JobListing] (backward compat)."""
+        mock_litellm.completion.return_value = _make_llm_response(
+            [{"title": "Eng", "url": "https://ex.com/eng"}]
+        )
+        parser = LLMFallbackParser()
+        result = parser.parse("<html><body>Jobs</body></html>", url="https://ex.com")
+        assert isinstance(result, list)
+        assert len(result) == 1

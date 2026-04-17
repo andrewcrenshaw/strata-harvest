@@ -1,6 +1,6 @@
 [project]
 name = "strata-harvest"
-version = "0.1.7"
+version = "0.1.8"
 description = "Career page scraping and ATS parsing library for job search automation"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -28,6 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 llm = [
     "litellm>=1.50",
+    "json-repair>=0.30",
 ]
 dev = [
     "build>=1.2",
@@ -97,6 +98,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "litellm"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "json_repair"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
