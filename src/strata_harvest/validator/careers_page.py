@@ -59,9 +59,7 @@ RC_NO_SIGNALS = "no_signals"
 # Schema types
 # ---------------------------------------------------------------------------
 _JOB_SCHEMA_TYPES: frozenset[str] = frozenset({"JobPosting"})
-_NON_JOB_SCHEMA_TYPES: frozenset[str] = frozenset(
-    {"BlogPosting", "NewsArticle", "Article"}
-)
+_NON_JOB_SCHEMA_TYPES: frozenset[str] = frozenset({"BlogPosting", "NewsArticle", "Article"})
 
 # ---------------------------------------------------------------------------
 # Compiled patterns
@@ -80,7 +78,7 @@ _TITLE_CAREERS_RE = re.compile(
     re.I,
 )
 _JOB_LIST_SIGNAL_RE = re.compile(
-    r'(job[-_]?card|job[-_]?listing|position[-_]?item|role[-_]?item'
+    r"(job[-_]?card|job[-_]?listing|position[-_]?item|role[-_]?item"
     r'|opening[-_]?row|data-job-id|class=["\']job|class=["\']position'
     r'|class=["\']role|aria-label=["\']job\s+posting)',
     re.I,
@@ -90,10 +88,10 @@ _JSON_LD_SCRIPT_RE = re.compile(
     re.DOTALL | re.I,
 )
 _OG_TYPE_RE = re.compile(
-    r'<meta[^>]+(?:'
+    r"<meta[^>]+(?:"
     r'property=["\']og:type["\'][^>]+content=["\']([^"\']+)["\']'
     r'|content=["\']([^"\']+)["\'][^>]+property=["\']og:type["\']'
-    r')',
+    r")",
     re.I,
 )
 _ARTICLE_PUB_TIME_RE = re.compile(r"article:published_time", re.I)
@@ -102,10 +100,10 @@ _NOINDEX_META_RE = re.compile(
     re.I,
 )
 _CANONICAL_HREF_RE = re.compile(
-    r'<link[^>]+(?:'
+    r"<link[^>]+(?:"
     r'rel=["\']canonical["\'][^>]+href=["\']([^"\']+)["\']'
     r'|href=["\']([^"\']+)["\'][^>]+rel=["\']canonical["\']'
-    r')',
+    r")",
     re.I,
 )
 _STRIP_TAGS_RE = re.compile(r"<[^>]+>")
@@ -204,9 +202,7 @@ class CareersPageValidator:
             result = ValidationResult(
                 is_valid=False,
                 confidence=0.9,
-                reject_reason=(
-                    "Page has noindex robots meta tag — likely not a public job board"
-                ),
+                reject_reason=("Page has noindex robots meta tag — likely not a public job board"),
                 reason_code=RC_NOINDEX,
                 signals=signals,
             )
@@ -273,8 +269,7 @@ class CareersPageValidator:
                     is_valid=False,
                     confidence=0.75,
                     reject_reason=(
-                        "Page text < 200 chars and no career page signals — "
-                        "empty or wrong page"
+                        "Page text < 200 chars and no career page signals — empty or wrong page"
                     ),
                     reason_code=RC_EMPTY_PAGE,
                     signals=signals,
@@ -434,9 +429,7 @@ class CareersPageValidator:
                 result = ValidationResult(
                     is_valid=False,
                     confidence=0.9,
-                    reject_reason=(
-                        f"Canonical URL points to non-job section: {canonical_url!r}"
-                    ),
+                    reject_reason=(f"Canonical URL points to non-job section: {canonical_url!r}"),
                     reason_code=RC_CANONICAL_NON_JOB,
                     signals=signals,
                 )

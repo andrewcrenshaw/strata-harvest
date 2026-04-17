@@ -119,9 +119,7 @@ class TestSsrfGuard:
 
     async def test_ssrf_blocks_before_availability_check(self) -> None:
         """Private-IP block fires even when curl_cffi flag is False."""
-        with patch(
-            "strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False
-        ):
+        with patch("strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False):
             result = await safe_fetch("http://192.168.1.1/", retries=0)
         assert result.ok is False
         assert "SSRF" in (result.error or "")
@@ -130,9 +128,7 @@ class TestSsrfGuard:
         """allow_private=True lets the request proceed past the SSRF guard."""
         # curl_cffi unavailable so we only verify the SSRF gate was bypassed
         # (result will fail on "curl_cffi not installed" instead of SSRF).
-        with patch(
-            "strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False
-        ):
+        with patch("strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False):
             result = await safe_fetch("http://192.168.1.1/", allow_private=True, retries=0)
         assert result.ok is False
         assert "SSRF" not in (result.error or "")
@@ -147,24 +143,18 @@ class TestSsrfGuard:
 @pytest.mark.verification
 class TestCurlCffiNotInstalled:
     async def test_returns_error_not_ok(self) -> None:
-        with patch(
-            "strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False
-        ):
+        with patch("strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False):
             result = await safe_fetch("https://example.com", retries=0)
         assert result.ok is False
         assert result.error is not None
 
     async def test_error_mentions_stealth_extra(self) -> None:
-        with patch(
-            "strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False
-        ):
+        with patch("strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False):
             result = await safe_fetch("https://example.com", retries=0)
         assert "stealth" in (result.error or "")
 
     async def test_url_preserved_in_result(self) -> None:
-        with patch(
-            "strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False
-        ):
+        with patch("strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", False):
             result = await safe_fetch("https://example.com/jobs", retries=0)
         assert result.url == "https://example.com/jobs"
 
@@ -174,9 +164,7 @@ class TestCurlCffiNotInstalled:
 # ---------------------------------------------------------------------------
 
 
-_PATCH_AVAILABLE = patch(
-    "strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", True
-)
+_PATCH_AVAILABLE = patch("strata_harvest.utils.impersonating_fetcher._CURL_CFFI_AVAILABLE", True)
 
 
 @pytest.mark.verification
@@ -371,7 +359,6 @@ class TestCrawlerTierEscalation:
         """When tier-1 returns 403, crawler logs escalation and uses tier-2 result."""
         import json
         import logging
-
 
         tier1_result = FetchResult(
             url="https://example.com/jobs",

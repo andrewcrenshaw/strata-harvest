@@ -9,21 +9,21 @@ repos:
     hooks:
       - id: ruff-lint
         name: Ruff lint (fix + check)
-        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run ruff check --fix . && PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run ruff check .'
+        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run --frozen ruff check --fix . && PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run --frozen ruff check .'
         language: system
         pass_filenames: false
         stages: [pre-commit]
 
       - id: ruff-format
         name: Ruff format check
-        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run ruff format --check .'
+        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run --frozen ruff format --check .'
         language: system
         pass_filenames: false
         stages: [pre-commit]
 
       - id: mypy
         name: mypy strict
-        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run mypy src/'
+        entry: bash -c 'PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH" uv run --frozen mypy src/'
         language: system
         pass_filenames: false
         stages: [pre-commit]

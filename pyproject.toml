@@ -1,6 +1,6 @@
 [project]
 name = "strata-harvest"
-version = "0.1.6"
+version = "0.1.7"
 description = "Career page scraping and ATS parsing library for job search automation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -56,6 +56,12 @@ browser = [
 ]
 extract = [
     "extruct>=0.16",
+    "trafilatura>=1.6",
+    "instructor>=1.5",
+]
+local-llm = [
+    "ollama>=0.1",
+    "instructor>=1.5",
 ]
 stealth = [
     "scrapling>=0.3.2",
@@ -119,6 +125,18 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "curl_cffi.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "trafilatura"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "instructor"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "ollama"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

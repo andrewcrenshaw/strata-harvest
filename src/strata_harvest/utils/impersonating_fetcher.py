@@ -37,7 +37,7 @@ try:
     _CURL_CFFI_AVAILABLE = True
 except ImportError:
     _CURL_CFFI_AVAILABLE = False
-    _AsyncSession = None  # type: ignore[assignment,misc]
+    _AsyncSession = None
 
 
 def _now_ms() -> int:
@@ -123,7 +123,7 @@ async def safe_fetch(
 
     for attempt in range(retries + 1):
         try:
-            async with _AsyncSession() as session:  # type: ignore[misc]
+            async with _AsyncSession() as session:
                 kwargs: dict[str, Any] = {
                     "impersonate": impersonate,
                     "timeout": timeout,

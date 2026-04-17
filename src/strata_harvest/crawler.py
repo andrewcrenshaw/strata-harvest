@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import httpx
 
 from strata_harvest.detector import detect_ats, detect_from_url
-from strata_harvest.models import ATSProvider, FetchResult, JobListing, ScrapeResult
+from strata_harvest.models import ATSInfo, ATSProvider, FetchResult, JobListing, ScrapeResult
 from strata_harvest.parsers.ashby import AshbyParser
 from strata_harvest.parsers.base import BaseParser
 from strata_harvest.parsers.llm_fallback import LLMFallbackParser
@@ -364,9 +364,7 @@ class Crawler:
                 if tier2_result.ok:
                     result = tier2_result
             else:
-                logger.debug(
-                    "curl_cffi not available; skipping tier-2 escalation for %s", url
-                )
+                logger.debug("curl_cffi not available; skipping tier-2 escalation for %s", url)
 
         # --- Tier-3 escalation: scrapling StealthyFetcher (PCC-1947) ---
         # Promote to tier 3 when the result (post tier-2) still indicates bot-blocking
@@ -545,9 +543,8 @@ class Crawler:
         # Phase 3 Fallback: Crawl4AI for UNKNOWN / SPA pages.
         # Rippling is handled by RipplingParser via __NEXT_DATA__ extraction and
         # no longer requires JS execution — removed from spa_providers.
-        _crawl4ai_trigger = (
-            ats_info.provider == ATSProvider.UNKNOWN
-            and (not fetch_result.ok or not html_content.strip() or len(jobs) < 5)
+        _crawl4ai_trigger = ats_info.provider == ATSProvider.UNKNOWN and (
+            not fetch_result.ok or not html_content.strip() or len(jobs) < 5
         )
         if _crawl4ai_trigger:
             from strata_harvest.parsers.crawl4ai_extractor import (
@@ -580,15 +577,75 @@ class Crawler:
             fetch_ok=True,
         )
 
+    async def _group_sources_by_ats(
+        self,
+        urls: list[str],
+    ) -> dict[tuple[ATSProvider, str | None], list[tuple[str, ATSInfo]]]:
+        """Pre-scan URLs to detect ATS and group by (provider, api_url) for batching.
+
+        Returns a dict mapping (provider, api_url) → [(url, ats_info), ...].
+        This enables coalescing multiple URLs pointing to the same ATS org.
+
+        For UNKNOWN providers (no api_url), each URL gets its own group so they
+        are scraped independently without unnecessary batching.
+
+        Parameters
+        ----------
+        urls:
+            URLs to group.
+
+        Returns
+        -------
+        dict[tuple[ATSProvider, str | None], list[tuple[str, ATSInfo]]]
+            Groups of URLs sharing the same ATS provider and API endpoint.
+        """
+        groups: dict[tuple[ATSProvider, str | None], list[tuple[str, ATSInfo]]] = {}
+
+        for url in urls:
+            try:
+                ats_info = await detect_ats(
+                    url,
+                    timeout=self._timeout,
+                    user_agent=self._user_agent,
+                    allow_private=self._allow_private,
+                )
+            except Exception as e:
+                # If detection fails (e.g., network issue, timeout), fall back to UNKNOWN
+                logger.debug("ATS detection failed for %s: %s; using UNKNOWN", url, e)
+                ats_info = ATSInfo(provider=ATSProvider.UNKNOWN)
+
+            # For batching: use api_url as the key. UNKNOWN providers have api_url=None,
+            # so each gets a unique key to avoid grouping together.
+            # This is done by appending a hash of the URL to the key for UNKNOWN providers.
+            if ats_info.api_url:
+                # Valid api_url: batch these together
+                key: tuple[ATSProvider, str | None] = (ats_info.provider, ats_info.api_url)
+            else:
+                # No api_url (UNKNOWN or stub providers): each URL gets a unique group
+                # by using a hash of the URL as the api_url component
+                url_hash = str(hash(url) & 0xFFFFFFFF)  # Use hash as unique identifier
+                key = (ats_info.provider, url_hash)
+
+            if key not in groups:
+                groups[key] = []
+            groups[key].append((url, ats_info))
+
+        return groups
+
     async def scrape_batch(
         self,
         urls: list[str],
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> AsyncIterator[ScrapeResult]:
-        """Scrape multiple URLs concurrently.
+        """Scrape multiple URLs concurrently with per-ATS-org batching.
+
+        Optimizes for cases where multiple companies share one ATS organization
+        (e.g., subsidiaries on the same Greenhouse board). Pre-detects ATS for
+        all URLs, groups by (provider, api_url), and fetches once per group
+        before distributing results to each requesting source.
 
         Uses an :class:`asyncio.Semaphore` to cap parallelism at
-        *concurrency*. Each URL is scraped via :meth:`scrape`, which applies
+        *concurrency*. Each URL group is scraped via :meth:`scrape`, which applies
         a global rate cap plus an independent per-hostname limiter; the
         semaphore bounds concurrent tasks while the limiters pace HTTP requests.
 
@@ -597,7 +654,7 @@ class Crawler:
         urls:
             URLs to scrape (empty list yields nothing).
         concurrency:
-            Maximum concurrent scrape tasks.
+            Maximum concurrent scrape tasks per ATS org group.
 
         Yields
         ------
@@ -613,21 +670,78 @@ class Crawler:
         if not urls:
             return
 
+        # Phase 1: Group sources by ATS provider and API endpoint
+        groups = await self._group_sources_by_ats(urls)
+
+        # Track batching optimization metric
+        original_fetch_count = len(urls)
+        batched_fetch_count = len(groups)
+        batched_saves = original_fetch_count - batched_fetch_count
+        if batched_saves > 0:
+            logger.debug(
+                "Per-ATS-org batching (PCC-1962): %d groups from %d URLs, saves %d fetches",
+                batched_fetch_count,
+                original_fetch_count,
+                batched_saves,
+            )
+
+        # Phase 2: Process each ATS group with concurrency limiting
         semaphore = asyncio.Semaphore(concurrency)
         queue: asyncio.Queue[ScrapeResult] = asyncio.Queue()
-        pending = len(urls)
 
-        async def _worker(url: str) -> None:
+        async def _batch_worker(
+            group_key: tuple[ATSProvider, str | None],
+            urls_with_info: list[tuple[str, ATSInfo]],
+        ) -> None:
+            """Scrape one representative URL and distribute to all group members."""
             try:
                 async with semaphore:
-                    result = await self.scrape(url)
-                    await queue.put(result)
+                    # Scrape the first URL in the group (representative of the org)
+                    primary_url = urls_with_info[0][0]
+                    primary_result = await self.scrape(primary_url)
+
+                    # Yield the primary result
+                    await queue.put(primary_result)
+
+                    # Distribute to other URLs in the same group
+                    # (In practice, strata filters these by department/location client-side)
+                    for secondary_url, _ in urls_with_info[1:]:
+                        secondary_result = ScrapeResult(
+                            url=secondary_url,
+                            jobs=primary_result.jobs,
+                            content_hash=primary_result.content_hash,
+                            changed=primary_result.changed,
+                            ats_info=primary_result.ats_info,
+                            scrape_duration_ms=primary_result.scrape_duration_ms,
+                            error=primary_result.error,
+                            fetch_ok=primary_result.fetch_ok,
+                        )
+                        await queue.put(secondary_result)
             except Exception as exc:
-                await queue.put(ScrapeResult(url=url, error=f"{type(exc).__name__}: {exc}"))
+                # Yield error result for primary URL
+                await queue.put(
+                    ScrapeResult(
+                        url=urls_with_info[0][0],
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+                # Propagate error to secondary URLs too
+                for secondary_url, _ in urls_with_info[1:]:
+                    await queue.put(
+                        ScrapeResult(
+                            url=secondary_url,
+                            error=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
 
-        tasks = [asyncio.create_task(_worker(u)) for u in urls]
+        # Create one task per ATS org group
+        tasks = [
+            asyncio.create_task(_batch_worker(key, urls_with_info))
+            for key, urls_with_info in groups.items()
+        ]
 
-        for _ in range(pending):
+        # Yield results as they arrive
+        for _ in range(len(urls)):
             yield await queue.get()
 
         await asyncio.gather(*tasks, return_exceptions=True)

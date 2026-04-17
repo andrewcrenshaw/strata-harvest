@@ -116,12 +116,8 @@ class SAPSuccessFactorsParser(BaseParser):
         location = raw.get("location") or raw.get("primaryLocation") or None
         department = raw.get("department") or raw.get("Division") or None
         employment_type = raw.get("employmentType") or raw.get("EmploymentType") or None
-        description = _strip_tags(
-            raw.get("jobDescription") or raw.get("extJobDesc") or ""
-        ) or None
-        posted_date = _parse_odata_date(
-            raw.get("postingDate") or raw.get("createdDateTime")
-        )
+        description = _strip_tags(raw.get("jobDescription") or raw.get("extJobDesc") or "") or None
+        posted_date = _parse_odata_date(raw.get("postingDate") or raw.get("createdDateTime"))
 
         return JobListing(
             title=title,
@@ -138,6 +134,7 @@ class SAPSuccessFactorsParser(BaseParser):
 
 def _strip_tags(html: str) -> str:
     import re
+
     return re.sub(r"<[^>]+>", "", html).strip()
 
 
@@ -147,10 +144,12 @@ def _parse_odata_date(ts: str | None) -> datetime | None:
         return None
     # OData /Date(1234567890000)/ format
     import re
+
     ticks_match = re.match(r"/Date\((\d+)(?:[+-]\d+)?\)/", ts)
     if ticks_match:
         try:
             from datetime import UTC
+
             return datetime.fromtimestamp(int(ticks_match.group(1)) / 1000, tz=UTC)
         except (OSError, ValueError, OverflowError):
             return None

@@ -47,8 +47,7 @@ def _unknown_ats() -> ATSInfo:
 def _jobs_page_html(extra: str = "") -> str:
     """Minimal HTML that looks like a real jobs page (dense enough text)."""
     jobs = "\n".join(
-        f'<div class="job-card"><h3>Engineer {i}</h3><p>Location: SF</p></div>'
-        for i in range(10)
+        f'<div class="job-card"><h3>Engineer {i}</h3><p>Location: SF</p></div>' for i in range(10)
     )
     return f"""
     <html><head><title>Open Roles at Acme</title></head>
@@ -222,9 +221,7 @@ class TestIRPageWithJoinUsCTA:
     def test_noindex_meta_rejects(self) -> None:
         """IR page with noindex robots meta is rejected."""
         html = _ir_noindex_html()
-        result = _VALIDATOR.validate(
-            "https://ir.example.com/shareholders", html
-        )
+        result = _VALIDATOR.validate("https://ir.example.com/shareholders", html)
         assert not result.is_valid
         assert result.reason_code == RC_NOINDEX
 
@@ -365,25 +362,19 @@ class TestValidGreenhouseBoard:
 class TestArchivedOrEmptyPage:
     def test_completely_empty_html_rejected(self) -> None:
         # Use a URL with no /careers-like segment so URL signal doesn't rescue it
-        result = _VALIDATOR.validate(
-            "https://old.example.com/archive/2020", ""
-        )
+        result = _VALIDATOR.validate("https://old.example.com/archive/2020", "")
         assert not result.is_valid
         assert result.reason_code == RC_EMPTY_PAGE
         assert result.suspect is True
 
     def test_minimal_html_no_content_rejected(self) -> None:
-        result = _VALIDATOR.validate(
-            "https://example.com/careers-2019", _empty_html()
-        )
+        result = _VALIDATOR.validate("https://example.com/careers-2019", _empty_html())
         # Empty HTML with no URL signals → reject
         assert result.reason_code == RC_EMPTY_PAGE
 
     def test_sparse_html_with_careers_url_is_suspect_valid(self) -> None:
         """Sparse page + careers URL → valid but suspect (may need heal)."""
-        result = _VALIDATOR.validate(
-            "https://example.com/careers", _sparse_html()
-        )
+        result = _VALIDATOR.validate("https://example.com/careers", _sparse_html())
         assert result.is_valid
         assert result.suspect is True
         assert result.reason_code == RC_EMPTY_PAGE
@@ -676,9 +667,7 @@ class TestAuditLogging:
 
         assert any("rejected" in r.message for r in caplog.records)
 
-    def test_valid_page_does_not_emit_reject_log(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_valid_page_does_not_emit_reject_log(self, caplog: pytest.LogCaptureFixture) -> None:
         import logging
 
         with caplog.at_level(logging.INFO, logger="strata_harvest.validator.careers_page"):

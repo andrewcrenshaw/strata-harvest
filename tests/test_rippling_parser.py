@@ -122,13 +122,15 @@ class TestRipplingParserParse:
 
     def test_jobs_as_list_not_dict(self) -> None:
         """pageProps.jobs can also be a plain list."""
-        data = json.dumps({
-            "props": {
-                "pageProps": {
-                    "jobs": [_SAMPLE_ITEM],
+        data = json.dumps(
+            {
+                "props": {
+                    "pageProps": {
+                        "jobs": [_SAMPLE_ITEM],
+                    }
                 }
             }
-        })
+        )
         html = f'<script id="__NEXT_DATA__">{data}</script>'
         result = self.parser.parse(html, url=self.url)
         assert len(result) == 1

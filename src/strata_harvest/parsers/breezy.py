@@ -115,6 +115,7 @@ class BreezyParser(BaseParser):
 
 def _strip_tags(html: str) -> str:
     import re
+
     return re.sub(r"<[^>]+>", "", html).strip()
 
 
@@ -124,6 +125,7 @@ def _parse_ts(ts: str | int | None) -> datetime | None:
     if isinstance(ts, (int, float)):
         try:
             from datetime import UTC
+
             return datetime.fromtimestamp(ts / 1000, tz=UTC)
         except (OSError, ValueError, OverflowError):
             return None

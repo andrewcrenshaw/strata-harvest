@@ -105,6 +105,7 @@ class PinpointParser(BaseParser):
 
 def _strip_tags(html: str) -> str:
     import re
+
     return re.sub(r"<[^>]+>", "", html).strip()
 
 

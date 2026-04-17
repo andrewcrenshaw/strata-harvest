@@ -246,7 +246,7 @@ class TestSitemapFinder:
   </url>
 </urlset>
 """
-        mock_resp = _mock_response(text=sitemap_content)
+        _mock_response(text=sitemap_content)
 
         with patch("strata_harvest.utils.sitemap.safe_fetch") as mock_fetch:
             mock_fetch.return_value = FetchResult(
@@ -374,5 +374,5 @@ class TestSitemapFinder:
 
         assert len(entries) == 1
         assert entries[0].url == "https://example.com/jobs/1"
-        # Should have made at least 2 calls: one for /sitemap.xml (index) and one for /sitemap-jobs.xml (jobs)
+        # Should have made at least 2 calls: /sitemap.xml (index) and /sitemap-jobs.xml (jobs)
         assert fetch_count >= 2

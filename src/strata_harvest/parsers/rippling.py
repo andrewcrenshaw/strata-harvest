@@ -112,13 +112,9 @@ class RipplingParser(BaseParser):
                 listing = self._parse_item(item)
                 next_data_results.append(listing)
             except Exception:
-                logger.debug(
-                    "RipplingParser: skipping malformed item id=%s", item.get("id", "?")
-                )
+                logger.debug("RipplingParser: skipping malformed item id=%s", item.get("id", "?"))
 
-        logger.debug(
-            "RipplingParser: extracted %d listings from %s", len(next_data_results), url
-        )
+        logger.debug("RipplingParser: extracted %d listings from %s", len(next_data_results), url)
         return next_data_results
 
     def _json_ld_to_listing(self, item: dict[str, Any], *, base_url: str) -> JobListing | None:

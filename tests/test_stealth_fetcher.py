@@ -170,9 +170,7 @@ class TestStealthFetcherErrors:
     async def test_exception_returns_error_result_not_raise(self) -> None:
         mock_fetcher_cls = MagicMock()
         mock_fetcher_instance = MagicMock()
-        mock_fetcher_instance.async_fetch = AsyncMock(
-            side_effect=RuntimeError("browser crash")
-        )
+        mock_fetcher_instance.async_fetch = AsyncMock(side_effect=RuntimeError("browser crash"))
         mock_fetcher_cls.return_value = mock_fetcher_instance
 
         with (
@@ -252,6 +250,4 @@ class TestStealthFetcherIntegration:
 
         assert result.ok is True, f"Expected HTTP 200, got error: {result.error}"
         assert result.content, "Expected non-empty HTML from nowsecure.nl"
-        assert len(result.content) > 500, (
-            f"HTML suspiciously short ({len(result.content)} bytes)"
-        )
+        assert len(result.content) > 500, f"HTML suspiciously short ({len(result.content)} bytes)"

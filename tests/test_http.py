@@ -653,7 +653,9 @@ class TestFetchResultStructure:
         assert result.etag == "abc123"
 
     def test_last_modified_field_exists(self) -> None:
-        result = FetchResult(url="https://example.com", last_modified="Mon, 15 Jan 2024 10:00:00 GMT")
+        result = FetchResult(
+            url="https://example.com", last_modified="Mon, 15 Jan 2024 10:00:00 GMT"
+        )
         assert result.last_modified == "Mon, 15 Jan 2024 10:00:00 GMT"
 
 

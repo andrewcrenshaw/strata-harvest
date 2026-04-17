@@ -94,9 +94,7 @@ def _extract_sitemap_entries(xml_content: str) -> list[SitemapEntry]:
             loc = url_elem.findtext("sm:loc", default=None, namespaces=namespace)
             if loc:
                 lastmod = url_elem.findtext("sm:lastmod", default=None, namespaces=namespace)
-                changefreq = url_elem.findtext(
-                    "sm:changefreq", default=None, namespaces=namespace
-                )
+                changefreq = url_elem.findtext("sm:changefreq", default=None, namespaces=namespace)
                 priority = url_elem.findtext("sm:priority", default=None, namespaces=namespace)
                 entries.append(
                     SitemapEntry(

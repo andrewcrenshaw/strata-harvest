@@ -138,9 +138,7 @@ class TestNewProviderURLDetection:
         }
         for url in safe_urls:
             info = detect_from_url(url)
-            assert info.provider not in new_providers, (
-                f"{url} falsely matched {info.provider}"
-            )
+            assert info.provider not in new_providers, f"{url} falsely matched {info.provider}"
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +416,9 @@ class TestPinpointParser:
 
     def test_parse_bare_array(self) -> None:
         """Pinpoint may return a bare JSON array instead of a wrapper dict."""
-        bare = [{"id": 1, "title": "Designer", "absolute_url": "https://acme.pinpointhq.com/jobs/1"}]
+        bare = [
+            {"id": 1, "title": "Designer", "absolute_url": "https://acme.pinpointhq.com/jobs/1"}
+        ]
         parser = PinpointParser()
         jobs = parser.parse(json.dumps(bare), url="https://acme.pinpointhq.com")
         assert len(jobs) == 1

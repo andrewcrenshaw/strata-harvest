@@ -25,7 +25,7 @@ _JOB_BLOCK_RE = re.compile(
     r'<[^>]+class=["\'][^"\']*(?:ph-job|phw-job|ph-card|phw-card)[^"\']*["\'][^>]*>(.*?)</(?:div|article|li)>',
     re.DOTALL | re.IGNORECASE,
 )
-_TITLE_RE = re.compile(r'<h[1-4][^>]*>(.*?)</h[1-4]>', re.DOTALL | re.IGNORECASE)
+_TITLE_RE = re.compile(r"<h[1-4][^>]*>(.*?)</h[1-4]>", re.DOTALL | re.IGNORECASE)
 _LINK_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -71,6 +71,7 @@ class PhenomParser(BaseParser):
         job_url = link_match.group(1) if link_match else source_url
         if not job_url.startswith("http"):
             from urllib.parse import urljoin
+
             job_url = urljoin(source_url, job_url)
 
         return JobListing(
