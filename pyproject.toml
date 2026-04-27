@@ -105,6 +105,10 @@ module = "json_repair"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "strata_harvest.parsers.llm_fallback"
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
 module = "exa_py"
 ignore_missing_imports = true
 
