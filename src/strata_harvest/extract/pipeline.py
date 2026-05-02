@@ -36,13 +36,15 @@ def extract_with_pipeline(
     enable_ollama: bool = True,
     enable_gemini_fallback: bool = False,
     ollama_base_url: str = "http://localhost:11434",
+    omlx_base_url: str | None = None,
+    omlx_api_key: str | None = None,
 ) -> list[JobListing]:
     """Extract job listings using the 5-tier pipeline.
 
     Attempts extraction in order of token efficiency:
     1. Structured data (JSON-LD) — zero LLM tokens
-    2. trafilatura + local Ollama Qwen2.5-7B
-    3. Hosted Gemini (if enabled and Ollama unavailable)
+    2. trafilatura + oMLX (fleet-local inference)
+    3. Hosted Gemini (if enabled and oMLX unavailable)
 
     Parameters
     ----------
@@ -51,12 +53,17 @@ def extract_with_pipeline(
     url:
         Page URL (used for relative link resolution, logging).
     enable_ollama:
-        Whether to attempt local Ollama extraction (default: True).
+        Whether to attempt local LLM extraction (default: True).
+        Name kept for backward compatibility; now routes to oMLX.
     enable_gemini_fallback:
-        Whether to fall back to hosted Gemini when Ollama unavailable
+        Whether to fall back to hosted Gemini when oMLX unavailable
         (respects HOSTED_LLM_FALLBACK_ENABLED env var). Default: False.
     ollama_base_url:
-        Ollama API base URL (default: http://localhost:11434).
+        Unused; kept for backward compatibility.
+    omlx_base_url:
+        oMLX base URL override (default: OMLX_BASE_URL env var or http://studio1:8000).
+    omlx_api_key:
+        oMLX API key override (default: OMLX_API_KEY env var or "strata1").
 
     Returns
     -------
@@ -74,13 +81,19 @@ def extract_with_pipeline(
         logger.info("Tier 0 success: extracted %d jobs from %s", len(jobs), url)
         return jobs
 
-    # Tier 2–3: trafilatura + local Ollama (if enabled)
+    # Tier 2: trafilatura + oMLX (if enabled)
     if enable_ollama:
-        logger.debug("Tier 2–3: Attempting local Ollama extraction from %s", url)
-        jobs = _extract_tier_2_local_llm(html, url=url, base_url=ollama_base_url)
+        logger.debug("Tier 2: Attempting oMLX extraction from %s", url)
+        jobs = _extract_tier_2_local_llm(
+            html,
+            url=url,
+            base_url=ollama_base_url,
+            omlx_base_url=omlx_base_url,
+            omlx_api_key=omlx_api_key,
+        )
         if jobs:
             logger.info(
-                "Tier 2–3 success: extracted %d jobs from %s via local Ollama",
+                "Tier 2 success: extracted %d jobs from %s via oMLX",
                 len(jobs),
                 url,
             )
@@ -106,6 +119,8 @@ async def extract_with_pipeline_async(
     enable_ollama: bool = True,
     enable_gemini_fallback: bool = False,
     ollama_base_url: str = "http://localhost:11434",
+    omlx_base_url: str | None = None,
+    omlx_api_key: str | None = None,
 ) -> list[JobListing]:
     """Async version of extract_with_pipeline.
 
@@ -118,6 +133,8 @@ async def extract_with_pipeline_async(
         enable_ollama=enable_ollama,
         enable_gemini_fallback=enable_gemini_fallback,
         ollama_base_url=ollama_base_url,
+        omlx_base_url=omlx_base_url,
+        omlx_api_key=omlx_api_key,
     )
 
 
@@ -156,11 +173,18 @@ def _extract_tier_0_structured(html: str) -> list[JobListing]:
     return results
 
 
-def _extract_tier_2_local_llm(html: str, *, url: str, base_url: str) -> list[JobListing]:
-    """Tier 2–3: trafilatura + local Ollama (Qwen2.5-7B-Instruct).
+def _extract_tier_2_local_llm(
+    html: str,
+    *,
+    url: str,
+    base_url: str,
+    omlx_base_url: str | None = None,
+    omlx_api_key: str | None = None,
+) -> list[JobListing]:
+    """Tier 2: trafilatura + oMLX OpenAI-compat extraction.
 
-    Extracts Markdown using trafilatura, then sends to Ollama for structured extraction.
-    Returns empty list if trafilatura or Ollama unavailable.
+    Extracts Markdown using trafilatura, then sends to oMLX for structured extraction.
+    Returns empty list if trafilatura or oMLX unavailable.
     """
     # Extract to Markdown (strips boilerplate, nav, ads, etc.)
     markdown = extract_markdown(html, url=url)
@@ -169,18 +193,16 @@ def _extract_tier_2_local_llm(html: str, *, url: str, base_url: str) -> list[Job
 
     # Import here to avoid hard dependency
     try:
-        from strata_harvest.extract.local_llm import OllamaExtractor
+        from strata_harvest.extract.local_llm import OmlxExtractor
     except ImportError:
-        logger.warning(
-            "ollama/instructor not installed: pip install strata-harvest[extract,local-llm]"
-        )
+        logger.warning("litellm not installed: pip install strata-harvest[llm]")
         return []
 
-    extractor = OllamaExtractor(base_url=base_url)
+    extractor = OmlxExtractor(base_url=omlx_base_url, api_key=omlx_api_key)
 
-    # Check if Ollama is reachable
+    # Check if oMLX is reachable
     if not extractor.is_available():
-        logger.debug("Ollama not available at %s", base_url)
+        logger.debug("oMLX not available at %s", extractor.base_url)
         return []
 
     # Extract jobs list from Markdown

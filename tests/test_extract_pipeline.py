@@ -24,6 +24,32 @@ from strata_harvest.extract.pipeline import (
 from strata_harvest.extract.schema import JobPostingSchema
 from strata_harvest.models import ATSProvider, JobListing
 
+OMLX_MOCK_RESPONSE_SINGLE = json.dumps(
+    {
+        "title": "Senior Backend Engineer",
+        "url": "https://example.com/job1",
+        "location": "San Francisco, CA",
+        "employment_type": "Full-time",
+    }
+)
+
+OMLX_MOCK_RESPONSE_LIST = json.dumps(
+    {
+        "items": [
+            {
+                "title": "Senior Backend Engineer",
+                "url": "https://example.com/job1",
+                "location": "San Francisco, CA",
+            },
+            {
+                "title": "Frontend Engineer",
+                "url": "https://example.com/job2",
+                "location": "Remote",
+            },
+        ]
+    }
+)
+
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "llm_fallback"
 
 
@@ -184,26 +210,175 @@ class TestTier0StructuredExtraction:
 
 
 # ============================================================================
-# Tier 2–3: Local Ollama Extraction
+# OmlxExtractor unit tests
+# ============================================================================
+
+
+@pytest.mark.verification
+class TestOmlxExtractor:
+    """OmlxExtractor: structured extraction via oMLX OpenAI-compat API."""
+
+    def test_omlx_extractor_importable(self) -> None:
+        """OmlxExtractor is importable from local_llm module."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        assert OmlxExtractor is not None
+
+    def test_omlx_extractor_default_attributes(self) -> None:
+        """OmlxExtractor has sensible defaults."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        extractor = OmlxExtractor()
+        assert extractor.base_url  # non-empty
+        assert extractor.model  # non-empty
+        assert extractor.api_key  # non-empty
+        assert extractor.timeout > 0
+
+    def test_omlx_extractor_env_var_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Constructor params override env vars, env vars override built-in defaults."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        monkeypatch.setenv("OMLX_BASE_URL", "http://custom-host:9000")
+        monkeypatch.setenv("OMLX_API_KEY", "my-key")
+        monkeypatch.setenv("OMLX_EXTRACT_MODEL", "custom-model")
+
+        extractor = OmlxExtractor()
+        assert extractor.base_url == "http://custom-host:9000"
+        assert extractor.api_key == "my-key"
+        assert extractor.model == "custom-model"
+
+    def test_omlx_extractor_constructor_params_override_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Explicit constructor params take priority over env vars."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        monkeypatch.setenv("OMLX_BASE_URL", "http://env-host:9000")
+        extractor = OmlxExtractor(base_url="http://explicit:8000")
+        assert extractor.base_url == "http://explicit:8000"
+
+    def test_omlx_extractor_extract_empty_text_returns_none(self) -> None:
+        """extract() returns None for empty input."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        extractor = OmlxExtractor()
+        assert extractor.extract("", JobPostingSchema) is None
+        assert extractor.extract("   ", JobPostingSchema) is None
+
+    def test_omlx_extractor_extract_list_empty_text_returns_empty(self) -> None:
+        """extract_list() returns [] for empty input."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        extractor = OmlxExtractor()
+        assert extractor.extract_list("", JobPostingSchema) == []
+        assert extractor.extract_list("   ", JobPostingSchema) == []
+
+    @patch("strata_harvest.extract.local_llm._litellm_mod")
+    def test_omlx_extractor_extract_success(self, mock_litellm: MagicMock) -> None:
+        """extract() parses LLM JSON response into Pydantic schema."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        message = MagicMock()
+        message.content = OMLX_MOCK_RESPONSE_SINGLE
+        choice = MagicMock()
+        choice.message = message
+        response = MagicMock()
+        response.choices = [choice]
+        mock_litellm.completion.return_value = response
+
+        extractor = OmlxExtractor()
+        result = extractor.extract("some job posting text", JobPostingSchema)
+
+        assert result is not None
+        assert result.title == "Senior Backend Engineer"
+        assert mock_litellm.completion.called
+        call_kwargs = mock_litellm.completion.call_args[1]
+        assert "openai/" in call_kwargs["model"]
+        assert call_kwargs["api_base"] == extractor.base_url
+        assert call_kwargs["api_key"] == extractor.api_key
+
+    @patch("strata_harvest.extract.local_llm._litellm_mod")
+    def test_omlx_extractor_extract_list_success(self, mock_litellm: MagicMock) -> None:
+        """extract_list() parses LLM JSON response into list of Pydantic objects."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        message = MagicMock()
+        message.content = OMLX_MOCK_RESPONSE_LIST
+        choice = MagicMock()
+        choice.message = message
+        response = MagicMock()
+        response.choices = [choice]
+        mock_litellm.completion.return_value = response
+
+        extractor = OmlxExtractor()
+        results = extractor.extract_list("job listings page", JobPostingSchema)
+
+        assert len(results) == 2
+        assert results[0].title == "Senior Backend Engineer"
+        assert results[1].title == "Frontend Engineer"
+
+    @patch("strata_harvest.extract.local_llm._litellm_mod")
+    def test_omlx_extractor_extract_returns_none_on_exception(
+        self, mock_litellm: MagicMock
+    ) -> None:
+        """extract() returns None when LLM call raises."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        mock_litellm.completion.side_effect = ConnectionError("oMLX unreachable")
+
+        extractor = OmlxExtractor()
+        result = extractor.extract("text", JobPostingSchema)
+        assert result is None
+
+    @patch("strata_harvest.extract.local_llm._litellm_mod")
+    def test_omlx_extractor_extract_list_returns_empty_on_exception(
+        self, mock_litellm: MagicMock
+    ) -> None:
+        """extract_list() returns [] when LLM call raises."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        mock_litellm.completion.side_effect = ConnectionError("oMLX unreachable")
+
+        extractor = OmlxExtractor()
+        result = extractor.extract_list("text", JobPostingSchema)
+        assert result == []
+
+    @patch("strata_harvest.extract.local_llm._litellm_mod")
+    def test_omlx_extractor_strips_markdown_fences(self, mock_litellm: MagicMock) -> None:
+        """extract() handles response wrapped in markdown code fences."""
+        from strata_harvest.extract.local_llm import OmlxExtractor
+
+        fenced = f"```json\n{OMLX_MOCK_RESPONSE_SINGLE}\n```"
+        message = MagicMock()
+        message.content = fenced
+        choice = MagicMock()
+        choice.message = message
+        response = MagicMock()
+        response.choices = [choice]
+        mock_litellm.completion.return_value = response
+
+        extractor = OmlxExtractor()
+        result = extractor.extract("some text", JobPostingSchema)
+        assert result is not None
+        assert result.title == "Senior Backend Engineer"
+
+
+# ============================================================================
+# Tier 2–3: Local LLM Extraction (now via OmlxExtractor)
 # ============================================================================
 
 
 class TestTier2LocalLLMExtraction:
-    """Tier 2–3: trafilatura + local Ollama extraction."""
+    """Tier 2: trafilatura + oMLX extraction."""
 
-    @pytest.mark.skipif(
-        not _instructor_available(),
-        reason="instructor not installed for Ollama test",
-    )
-    @patch("strata_harvest.extract.local_llm.OllamaExtractor")
+    @patch("strata_harvest.extract.local_llm.OmlxExtractor")
     @patch("strata_harvest.extract.pipeline.extract_markdown")
     def test_local_llm_extraction_success(
         self,
         mock_extract_markdown: MagicMock,
         mock_extractor_class: MagicMock,
     ) -> None:
-        """Successfully extract jobs via local Ollama."""
-        # Mock trafilatura extraction
+        """Successfully extract jobs via oMLX."""
         mock_extract_markdown.return_value = """
         Senior Backend Engineer
         https://example.com/job1
@@ -212,7 +387,6 @@ class TestTier2LocalLLMExtraction:
         Build scalable backend systems
         """
 
-        # Mock Ollama extraction
         posting = JobPostingSchema(
             title="Senior Backend Engineer",
             url="https://example.com/job1",
@@ -234,18 +408,14 @@ class TestTier2LocalLLMExtraction:
         assert jobs[0].title == "Senior Backend Engineer"
         assert jobs[0].ats_provider == ATSProvider.UNKNOWN
 
-    @pytest.mark.skipif(
-        not _instructor_available(),
-        reason="instructor not installed for Ollama test",
-    )
-    @patch("strata_harvest.extract.local_llm.OllamaExtractor")
+    @patch("strata_harvest.extract.local_llm.OmlxExtractor")
     @patch("strata_harvest.extract.pipeline.extract_markdown")
-    def test_local_llm_ollama_unavailable(
+    def test_local_llm_omlx_unavailable(
         self,
         mock_extract_markdown: MagicMock,
         mock_extractor_class: MagicMock,
     ) -> None:
-        """Return empty when Ollama is unavailable."""
+        """Return empty when oMLX is unavailable."""
         mock_extract_markdown.return_value = "Some markdown content"
         mock_extractor = MagicMock()
         mock_extractor.is_available.return_value = False

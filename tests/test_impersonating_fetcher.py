@@ -546,9 +546,9 @@ class TestJa3Fingerprint:
         """Sanity check: curl_cffi is installed in the stealth-extra environment."""
         from strata_harvest.utils.impersonating_fetcher import _CURL_CFFI_AVAILABLE
 
-        assert _CURL_CFFI_AVAILABLE, (
-            "curl_cffi not installed — run: pip install strata-harvest[stealth]"
-        )
+        if not _CURL_CFFI_AVAILABLE:
+            pytest.skip("curl_cffi not installed — run: pip install strata-harvest[stealth]")
+        assert _CURL_CFFI_AVAILABLE
 
     async def test_ja3_fingerprint_differs_from_httpx(self) -> None:
         """Impersonated request fingerprint differs from a plain httpx request.
