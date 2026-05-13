@@ -24,6 +24,10 @@ The result is a single `harvest(url)` call that returns clean, typed job data fr
 
 ## Recent Updates
 
+**2026-05-13 (v0.1.9)**
+- **Local LLM extraction pipeline** — oMLX-aware chunking routes to locally-served models; the extraction pipeline now selects chunk sizing and context windows based on the detected model slot (fast/balanced/quality)
+- **Impersonating fetcher improvements** — More robust browser-profile rotation and header normalization for sites that fingerprint TLS JA3 signatures
+
 **2026-04-17 (v0.1.8)**
 - **JSON salvage** — `json-repair` automatically recovers malformed LLM output; results tagged with `ParseStatus` (CLEAN / SALVAGED / TRUNCATED / FAILED)
 - **Truncation retry** — Detects `finish_reason=length`, retries with 2× `max_tokens`, falls back to chunked parsing
