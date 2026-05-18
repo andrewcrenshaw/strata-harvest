@@ -36,6 +36,7 @@ class BaseParser(ABC):
         *,
         llm_provider: str | None = None,
         api_base: str | None = None,
+        api_key: str | None = None,
     ) -> BaseParser:
         """Return the parser instance for a given ATS provider.
 
@@ -46,8 +47,12 @@ class BaseParser(ABC):
 
         parser_cls = _REGISTRY.get(provider, LLMFallbackParser)
         if parser_cls.is_stub or parser_cls is LLMFallbackParser:
-            if llm_provider or api_base:
-                return LLMFallbackParser(llm_provider=llm_provider, api_base=api_base)
+            if llm_provider or api_base or api_key:
+                return LLMFallbackParser(
+                    llm_provider=llm_provider,
+                    api_base=api_base,
+                    api_key=api_key,
+                )
             return LLMFallbackParser()
         return parser_cls()
 

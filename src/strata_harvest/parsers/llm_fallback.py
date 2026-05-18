@@ -219,10 +219,15 @@ class LLMFallbackParser(BaseParser):
         *,
         llm_provider: str | None = None,
         api_base: str | None = None,
+        api_key: str | None = None,
         max_tokens: int | None = None,
     ) -> None:
         self._model = llm_provider or DEFAULT_MODEL
         self._api_base = api_base  # e.g. "http://192.168.50.220:8080" — caller's responsibility
+        # Optional explicit key for OpenAI-compatible endpoints (e.g. oMLX) that
+        # validate keys. When unset and api_base is provided, falls back to the
+        # historic "not-required" sentinel for permissive local servers.
+        self._api_key = api_key
         self._max_tokens = max_tokens
 
     def parse(self, content: str, *, url: str) -> list[JobListing]:
@@ -333,7 +338,7 @@ class LLMFallbackParser(BaseParser):
             kwargs["max_tokens"] = max_tokens
         if self._api_base:
             kwargs["api_base"] = self._api_base
-            kwargs["api_key"] = "not-required"
+            kwargs["api_key"] = self._api_key or "not-required"
         response = litellm.completion(**kwargs)
         if response.choices and response.choices[0].finish_reason == "length":
             raise TruncatedCompletionError(

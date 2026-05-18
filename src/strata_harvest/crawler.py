@@ -89,6 +89,7 @@ _TIER3_EMPTY_BODY_THRESHOLD: int = 200
 _TIER3_REASON_403 = "TIER3_403"
 _TIER3_REASON_CLOUDFLARE = "TIER3_CLOUDFLARE"
 _TIER3_REASON_EMPTY_200 = "TIER3_EMPTY_200"
+_TIER3_REASON_UNKNOWN_ATS = "TIER3_UNKNOWN_ATS"
 
 
 def _tier3_escalation_reason(result: FetchResult) -> str | None:
@@ -168,6 +169,7 @@ class Crawler:
         proxy: str | None = None,
         llm_provider: str | None = None,
         llm_api_base: str | None = None,
+        llm_api_key: str | None = None,
         allow_private: bool = False,
         respect_robots: bool = True,
         robots_cache_ttl: float = 3600.0,
@@ -185,6 +187,7 @@ class Crawler:
         self._proxy = proxy
         self._llm_provider = llm_provider
         self._llm_api_base = llm_api_base
+        self._llm_api_key = llm_api_key
         self._allow_private = allow_private
         self._respect_robots = respect_robots
         self._robots_checker = RobotsTxtChecker(
@@ -367,13 +370,27 @@ class Crawler:
                 logger.debug("curl_cffi not available; skipping tier-2 escalation for %s", url)
 
         # --- Tier-3 escalation: scrapling StealthyFetcher (PCC-1947) ---
-        # Promote to tier 3 when the result (post tier-2) still indicates bot-blocking
-        # or an empty page.  Skipped for API-native ATS providers (Greenhouse, Lever,
-        # Ashby) that use direct API endpoints and don't need browser rendering.
-        # Every escalation emits a structured log entry with the reason code so that
-        # the scrape audit trail remains queryable.
+        # Promote to tier 3 when (a) the result still indicates bot-blocking or
+        # an empty page, OR (b) ATS detection on the static HTML returned
+        # UNKNOWN — these are typically SPA career pages (React/Vue/Angular)
+        # whose listings are JS-rendered, so the static tier-1 HTML feeds the
+        # LLM parser a useless shell. Re-fetching with camoufox gives a
+        # rendered DOM that the LLM can actually extract jobs from.
+        #
+        # Skipped for API-native ATS providers (Greenhouse, Lever, Ashby) —
+        # they use direct API endpoints and don't need browser rendering.
+        ats_info = await detect_ats(
+            url,
+            html=result.content or "",
+            timeout=self._timeout,
+            user_agent=self._user_agent,
+            allow_private=self._allow_private,
+        )
+
         if url_hint.provider not in _ROBOTS_BYPASS_PROVIDERS:
             _t3_reason = _tier3_escalation_reason(result)
+            if not _t3_reason and ats_info.provider == ATSProvider.UNKNOWN:
+                _t3_reason = _TIER3_REASON_UNKNOWN_ATS
             if _t3_reason:
                 from strata_harvest.utils.stealth_fetcher import (  # noqa: PLC0415
                     _SCRAPLING_AVAILABLE,
@@ -390,6 +407,16 @@ class Crawler:
                     if tier3_result.ok:
                         logger.info("Tier-3 StealthyFetcher succeeded for %s", url)
                         result = tier3_result
+                        # Re-detect ATS on the rendered DOM — JS-loaded ATS
+                        # widgets (e.g. an embedded Greenhouse iframe) only
+                        # become visible after Tier-3 rendering.
+                        ats_info = await detect_ats(
+                            url,
+                            html=result.content or "",
+                            timeout=self._timeout,
+                            user_agent=self._user_agent,
+                            allow_private=self._allow_private,
+                        )
                     else:
                         logger.warning(
                             "Tier-3 StealthyFetcher failed for %s: %s",
@@ -402,14 +429,6 @@ class Crawler:
                         url,
                         _t3_reason,
                     )
-
-        ats_info = await detect_ats(
-            url,
-            html=result.content or "",
-            timeout=self._timeout,
-            user_agent=self._user_agent,
-            allow_private=self._allow_private,
-        )
 
         # --- Pre-harvest validation (PCC-1946) ---
         # Reject wrong-page false-positives before any parsing work begins.
@@ -756,6 +775,7 @@ class Crawler:
             provider,
             llm_provider=self._llm_provider,
             api_base=self._llm_api_base,
+            api_key=self._llm_api_key,
         )
 
 
@@ -770,6 +790,7 @@ def create_crawler(
     proxy: str | None = None,
     llm_provider: str | None = None,
     llm_api_base: str | None = None,
+    llm_api_key: str | None = None,
     allow_private: bool = False,
     respect_robots: bool = True,
     robots_cache_ttl: float = 3600.0,
@@ -835,6 +856,7 @@ def create_crawler(
         proxy=proxy,
         llm_provider=llm_provider,
         llm_api_base=llm_api_base,
+        llm_api_key=llm_api_key,
         allow_private=allow_private,
         respect_robots=respect_robots,
         robots_cache_ttl=robots_cache_ttl,

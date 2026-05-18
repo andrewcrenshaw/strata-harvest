@@ -1126,13 +1126,51 @@ class TestCrawlerTier3Escalation:
         mock_stealth.assert_awaited_once_with(url)
 
     @pytest.mark.asyncio
-    async def test_tier3_not_triggered_on_clean_200(self) -> None:
-        """AC: Rich 200 response does NOT escalate to tier-3."""
+    async def test_tier3_not_triggered_on_clean_200_with_known_ats(self) -> None:
+        """AC: Rich 200 response from a recognised ATS does NOT escalate to tier-3.
+
+        A successful fetch from a known ATS provider has working parsers and
+        does not need browser rendering — Tier-3 would be wasted cycles.
+        """
         url = "https://normal.example.com/careers"
         rich_html = "<html><body>" + ("<p>Software Engineer role</p>" * 30) + "</body></html>"
         ok_fetch = FetchResult(url=url, status_code=200, content=rich_html, elapsed_ms=25.0)
 
         mock_stealth_cls = MagicMock()
+
+        with (
+            patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=ok_fetch)),
+            patch(
+                "strata_harvest.crawler.detect_ats",
+                AsyncMock(return_value=ATSInfo(provider=ATSProvider.WORKDAY)),
+            ),
+            patch("strata_harvest.utils.stealth_fetcher._SCRAPLING_AVAILABLE", True),
+            patch(
+                "strata_harvest.utils.stealth_fetcher.StealthFetcher",
+                mock_stealth_cls,
+            ),
+        ):
+            c = create_crawler(respect_robots=False)
+            await c.scrape(url)
+
+        mock_stealth_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_tier3_triggered_on_unknown_ats_clean_200(self) -> None:
+        """AC: Rich 200 response with UNKNOWN ATS escalates to tier-3 (TIER3_UNKNOWN_ATS).
+
+        Self-hosted careers SPAs (React/Vue/Angular) serve a full HTML shell
+        on tier-1 but no ATS pattern is detectable. Tier-3 re-fetch with
+        camoufox renders the JS so the LLM fallback parser has real DOM to
+        work with.
+        """
+        url = "https://spa-careers.example.com/careers"
+        rich_html = "<html><body>" + ("<p>Software Engineer role</p>" * 30) + "</body></html>"
+        ok_fetch = FetchResult(url=url, status_code=200, content=rich_html, elapsed_ms=25.0)
+        stealth_response = self._stealth_ok_fetch(url)
+
+        mock_stealth = AsyncMock(return_value=stealth_response)
+        mock_stealth_cls = MagicMock(return_value=MagicMock(fetch=mock_stealth))
 
         with (
             patch("strata_harvest.crawler.safe_fetch", AsyncMock(return_value=ok_fetch)),
@@ -1146,7 +1184,7 @@ class TestCrawlerTier3Escalation:
             c = create_crawler(respect_robots=False)
             await c.scrape(url)
 
-        mock_stealth_cls.assert_not_called()
+        mock_stealth.assert_awaited_once_with(url)
 
     @pytest.mark.asyncio
     async def test_tier3_skipped_for_api_native_ats(self) -> None:
