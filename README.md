@@ -24,6 +24,9 @@ The result is a single `harvest(url)` call that returns clean, typed job data fr
 
 ## Recent Updates
 
+**2026-05-19 (v0.1.10)**
+- Tier-3 escalation for unknown ATS providers with LLM API key plumbing for improved fallback coverage
+
 **2026-05-13 (v0.1.9)**
 - **Local LLM extraction pipeline** — oMLX-aware chunking routes to locally-served models; the extraction pipeline now selects chunk sizing and context windows based on the detected model slot (fast/balanced/quality)
 - **Impersonating fetcher improvements** — More robust browser-profile rotation and header normalization for sites that fingerprint TLS JA3 signatures
