@@ -190,6 +190,14 @@ class ScrapeResult(BaseModel):
         zero jobs were parsed.  ``False`` on transport errors, non-2xx responses,
         or when the scrape was aborted before any fetch.
         Use this to distinguish *silent empty parse* from *hard failure*.
+    extraction_empty:
+        ``True`` only when the page was fetched successfully and a parser ran
+        but produced zero listings (the "fetched-but-zero-extracted" outcome).
+        Distinct from a hard failure (``fetch_ok=False``), a 304-unchanged
+        short-circuit (which never re-parses and leaves this ``False``), and a
+        successful extraction (non-empty ``jobs``). Downstream consumers should
+        not treat ``extraction_empty=True`` pages as healthy — a 0-listing
+        company that scrapes cleanly is a yield gap, not a healthy board.
 
     Examples
     --------
@@ -215,6 +223,7 @@ class ScrapeResult(BaseModel):
     scrape_duration_ms: float = 0.0
     error: str | None = None
     fetch_ok: bool = False
+    extraction_empty: bool = False
     parse_status: ParseStatus | None = None
 
     @property

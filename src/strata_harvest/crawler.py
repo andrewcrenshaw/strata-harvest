@@ -594,6 +594,10 @@ class Crawler:
             ats_info=ats_info,
             scrape_duration_ms=fetch_result.elapsed_ms,
             fetch_ok=True,
+            # Fetched cleanly but the parser produced nothing — surface this as a
+            # distinct outcome so 0-listing boards aren't mistaken for healthy
+            # (PCC-2704). The 304 path returns earlier and never reaches here.
+            extraction_empty=not jobs,
         )
 
     async def _group_sources_by_ats(
@@ -734,6 +738,7 @@ class Crawler:
                             scrape_duration_ms=primary_result.scrape_duration_ms,
                             error=primary_result.error,
                             fetch_ok=primary_result.fetch_ok,
+                            extraction_empty=primary_result.extraction_empty,
                         )
                         await queue.put(secondary_result)
             except Exception as exc:

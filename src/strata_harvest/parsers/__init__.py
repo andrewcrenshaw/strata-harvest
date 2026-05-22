@@ -8,6 +8,7 @@ from strata_harvest.parsers.greenhouse import GreenhouseParser
 from strata_harvest.parsers.icims import ICIMSParser
 from strata_harvest.parsers.lever import LeverParser
 from strata_harvest.parsers.llm_fallback import LLMFallbackParser
+from strata_harvest.parsers.personio import PersonioParser
 from strata_harvest.parsers.phenom import PhenomParser
 from strata_harvest.parsers.pinpoint import PinpointParser
 from strata_harvest.parsers.recruitee import RecruiteeParser
@@ -26,6 +27,7 @@ __all__ = [
     "ICIMSParser",
     "LeverParser",
     "LLMFallbackParser",
+    "PersonioParser",
     "PhenomParser",
     "PinpointParser",
     "RecruiteeParser",
