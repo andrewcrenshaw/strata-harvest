@@ -64,8 +64,9 @@ local-llm = [
     "ollama>=0.1",
     "instructor>=1.5",
 ]
+# browser (crawl4ai, lxml<6) and scrapling (lxml>=6) are mutually incompatible;
+# stealth keeps only curl_cffi to avoid the conflict — scrapling users must install it separately.
 stealth = [
-    "scrapling>=0.3.2",
     "curl_cffi>=0.7",
 ]
 
@@ -151,6 +152,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-m 'not integration'"
 markers = [
     "verification: fast tests for CI verification slice",
     "integration: tests requiring external services",
