@@ -37,7 +37,7 @@ try:
     _CURL_CFFI_AVAILABLE = True
 except ImportError:
     _CURL_CFFI_AVAILABLE = False
-    _AsyncSession = None
+    _AsyncSession = None  # type: ignore[assignment,misc]
 
 
 def _now_ms() -> int:

@@ -31,7 +31,7 @@ from urllib.parse import urlparse
 try:
     import litellm
 except ImportError:  # pragma: no cover - base install without ``[llm]`` extra
-    litellm = None
+    litellm = None  # type: ignore[assignment]
 
 try:
     import json_repair

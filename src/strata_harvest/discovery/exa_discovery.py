@@ -126,7 +126,6 @@ async def find_career_page(
         response: Any = client.search(
             query,
             num_results=num_results,
-            use_autoprompt=False,
             type="neural",
         )
     except Exception as exc:  # noqa: BLE001

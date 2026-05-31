@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 try:
     import litellm
 except ImportError:
-    litellm = None
+    litellm = None  # type: ignore[assignment]
 
 
 def extract_with_pipeline(

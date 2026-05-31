@@ -21,7 +21,7 @@ try:
 
     _LITELLM_AVAILABLE = True
 except ImportError:
-    _litellm_mod = None
+    _litellm_mod = None  # type: ignore[assignment]
     _LITELLM_AVAILABLE = False
 
 try:

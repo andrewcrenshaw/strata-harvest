@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Import guarded to allow graceful failure if crawl4ai is not installed
 try:
     from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, LLMConfig
-    from crawl4ai.extraction_strategy import LLMExtractionStrategy  # type: ignore[import-not-found]
+    from crawl4ai.extraction_strategy import LLMExtractionStrategy  # type: ignore[import-untyped]
 
     _CRAWL4AI_AVAILABLE = True
 except ImportError:
