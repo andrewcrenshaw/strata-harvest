@@ -19,6 +19,8 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 
 logger = logging.getLogger(__name__)
@@ -99,11 +101,18 @@ class Crawl4AIFetcher:
             page_timeout=self._timeout * 1000,  # crawl4ai expects milliseconds
         )
 
+        result = None
+        crawler_cm = AsyncWebCrawler(config=browser_config)
+        crawler = await crawler_cm.__aenter__()
         try:
-            async with AsyncWebCrawler(config=browser_config) as crawler:
-                result = await crawler.arun(url=url, config=run_config)
+            result = await crawler.arun(url=url, config=run_config)
         except Exception:
             logger.warning("Crawl4AIFetcher failed for %s", url, exc_info=True)
+        finally:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await asyncio.shield(crawler_cm.__aexit__(None, None, None))
+
+        if result is None:
             return ""
 
         if not result.success:

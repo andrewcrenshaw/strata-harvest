@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -75,18 +77,25 @@ class Crawl4AIExtractor:
             schema=JOB_PAGE_SCHEMA,
             instruction="Extract all job listings from this career page.",
         )
+        result = None
+        crawler_cm = AsyncWebCrawler(headless=True)
+        crawler = await crawler_cm.__aenter__()
         try:
-            async with AsyncWebCrawler(headless=True) as crawler:
-                result = await crawler.arun(
-                    url=url,
-                    config=CrawlerRunConfig(
-                        extraction_strategy=strategy,
-                        js_code="window.scrollTo(0, document.body.scrollHeight);",
-                        page_timeout=30000,
-                    ),
-                )
+            result = await crawler.arun(
+                url=url,
+                config=CrawlerRunConfig(
+                    extraction_strategy=strategy,
+                    js_code="window.scrollTo(0, document.body.scrollHeight);",
+                    page_timeout=30000,
+                ),
+            )
         except Exception as e:
             logger.warning("Crawl4AI extraction failed for %s: %s", url, e)
+        finally:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await asyncio.shield(crawler_cm.__aexit__(None, None, None))
+
+        if result is None:
             return []
 
         if not result.success:

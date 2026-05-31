@@ -88,9 +88,7 @@ class PersonioParser(BaseParser):
 
         location = _text(position.find("office"))
         department = _text(position.find("department"))
-        employment_type = _text(position.find("employmentType")) or _text(
-            position.find("schedule")
-        )
+        employment_type = _text(position.find("employmentType")) or _text(position.find("schedule"))
         description = _join_descriptions(position) or None
         posted_date = _parse_iso(_text(position.find("createdAt")))
 

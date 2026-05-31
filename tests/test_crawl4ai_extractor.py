@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -154,3 +155,60 @@ class TestCrawl4AIExtractorSuccess:
             jobs = await extractor.extract("https://example.com/jobs")
 
         assert jobs == []
+
+
+# ---------------------------------------------------------------------------
+# Cancellation-safe teardown (PCC-2696)
+# ---------------------------------------------------------------------------
+
+
+class TestCrawl4AIExtractorCancellationSafe:
+    """Verify __aexit__ is called even under CancelledError (PCC-2696)."""
+
+    @pytest.mark.asyncio
+    async def test_aexit_called_on_cancellation(self) -> None:
+        """crawler.__aexit__() runs even when arun() raises CancelledError."""
+        mock_crawler_instance = AsyncMock()
+        mock_crawler_instance.__aenter__ = AsyncMock(return_value=mock_crawler_instance)
+        mock_crawler_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_instance.arun = AsyncMock(side_effect=asyncio.CancelledError())
+
+        with (
+            patch.multiple(
+                "strata_harvest.parsers.crawl4ai_extractor",
+                create=True,
+                _CRAWL4AI_AVAILABLE=True,
+                AsyncWebCrawler=MagicMock(return_value=mock_crawler_instance),
+                CrawlerRunConfig=MagicMock(),
+                LLMConfig=MagicMock(),
+                LLMExtractionStrategy=MagicMock(),
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            extractor = Crawl4AIExtractor()
+            await extractor.extract("https://example.com/careers")
+
+        mock_crawler_instance.__aexit__.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_aexit_called_even_when_it_raises(self) -> None:
+        """CancelledError propagates even if __aexit__ itself raises."""
+        mock_crawler_instance = AsyncMock()
+        mock_crawler_instance.__aenter__ = AsyncMock(return_value=mock_crawler_instance)
+        mock_crawler_instance.__aexit__ = AsyncMock(side_effect=RuntimeError("already closed"))
+        mock_crawler_instance.arun = AsyncMock(side_effect=asyncio.CancelledError())
+
+        with (
+            patch.multiple(
+                "strata_harvest.parsers.crawl4ai_extractor",
+                create=True,
+                _CRAWL4AI_AVAILABLE=True,
+                AsyncWebCrawler=MagicMock(return_value=mock_crawler_instance),
+                CrawlerRunConfig=MagicMock(),
+                LLMConfig=MagicMock(),
+                LLMExtractionStrategy=MagicMock(),
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            extractor = Crawl4AIExtractor()
+            await extractor.extract("https://example.com/careers")
