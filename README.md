@@ -24,6 +24,9 @@ The result is a single `harvest(url)` call that returns clean, typed job data fr
 
 ## Recent Updates
 
+**2026-06-01 (v0.1.11)**
+- Add Personio XML parser with support for fetched-but-zero-extracted outcome tracking
+
 **2026-05-19 (v0.1.10)**
 - Tier-3 escalation for unknown ATS providers with LLM API key plumbing for improved fallback coverage
 
