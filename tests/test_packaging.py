@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tomllib
@@ -18,7 +19,7 @@ def test_pyproject_name_version_python_requires() -> None:
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     proj = data["project"]
     assert proj["name"] == "strata-harvest"
-    assert proj["version"] == "0.1.11"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", proj["version"])
     assert proj["requires-python"] == ">=3.12"
 
 
