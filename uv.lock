@@ -3077,7 +3077,7 @@ wheels = [
 
 [[package]]
 name = "strata-harvest"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -3129,7 +3129,9 @@ stealth = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "mypy" },
     { name = "respx" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -3163,7 +3165,11 @@ requires-dist = [
 provides-extras = ["llm", "dev", "docs", "ocr", "exa", "browser", "extract", "local-llm", "stealth"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "respx", specifier = ">=0.22.0" }]
+dev = [
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "respx", specifier = ">=0.22.0" },
+    { name = "ruff", specifier = ">=0.4" },
+]
 
 [[package]]
 name = "tenacity"

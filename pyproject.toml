@@ -92,6 +92,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "TCH"]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
+warn_unused_ignores = false
 
 [[tool.mypy.overrides]]
 module = "pypdfium2"
@@ -115,6 +116,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "crawl4ai"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "crawl4ai.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -160,5 +165,7 @@ markers = [
 
 [dependency-groups]
 dev = [
+    "mypy>=1.10",
     "respx>=0.22.0",
+    "ruff>=0.4",
 ]
